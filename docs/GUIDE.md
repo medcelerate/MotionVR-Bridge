@@ -71,8 +71,13 @@ Turn on **Synchronized recording** on each machine. Instances find each other on
 network with DNS-SD (Bonjour, service `_mvb._udp`), and the recording settings list the ones found.
 Starting or stopping on any of them (button or OSC) does the same on all of them, under the same
 take name with each machine's name appended, e.g. `Scene 1 - Studio A.mvb`. Every file stores its
-start time (`start_unix_ms`) for lining takes up afterwards. The OSC port must be reachable
-between the machines.
+start time (`start_unix_ms`) for lining takes up afterwards.
+
+Every instance that should join in needs **Synchronized recording** on; ones with it off record on
+their own. **OSC control** isn't needed for sync: instances talk to each other on the OSC port
+either way (it opens for sync alone, but then only accepts messages from other instances), and
+each advertises its own port, so ports don't have to match. The machines must be able to reach
+each other's port through any firewall.
 
 ### File format
 

@@ -30,11 +30,12 @@ struct RecordingSettings {
 // Records the frames passing through the bridge, and lets OSC and other
 // instances on the network start and stop recording.
 //
-// OSC control (UDP, on oscPort):
+// OSC control (UDP, on oscPort, only when oscControl is on):
 //   /mvb/record <1|0> [take]         start / stop
 //   /mvb/record/start [take]  /mvb/record/stop  /mvb/record/toggle
-// Between instances (sync): /mvb/sync/record <1|0> <take> <sender id>,
-// sent to every discovered instance and never forwarded again.
+// Between instances (sync, needs only sync on; the listener runs for either):
+// /mvb/sync/record <1|0> <take> <sender id>, sent to every discovered
+// instance and never forwarded again.
 class RecordingManager {
 public:
     enum class Origin { Local, Osc, Sync };

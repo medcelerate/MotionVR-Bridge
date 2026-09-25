@@ -193,6 +193,15 @@ void RecordingManager::runOsc(uint16_t port)
 
 void RecordingManager::handle(const osc::Message& m)
 {
+    if (m.address == "/mvb/sync/record") {
+        if (!settings().sync || m.text(2) == id_)
+            return;
+        m.number(0) >= 0.5f ? (void)start(m.text(1), Origin::Sync) : stop(Origin::Sync);
+        return;
+    }
+    // The listener also runs for sync alone; outside commands need OSC control.
+    if (!settings().oscControl)
+        return;
     if (m.address == "/mvb/record") {
         m.number(0, 1.0f) >= 0.5f ? (void)start(m.text(1), Origin::Osc) : stop(Origin::Osc);
     } else if (m.address == "/mvb/record/start") {
@@ -201,10 +210,6 @@ void RecordingManager::handle(const osc::Message& m)
         stop(Origin::Osc);
     } else if (m.address == "/mvb/record/toggle") {
         status().recording ? stop(Origin::Osc) : (void)start("", Origin::Osc);
-    } else if (m.address == "/mvb/sync/record") {
-        if (!settings().sync || m.text(2) == id_)
-            return;
-        m.number(0) >= 0.5f ? (void)start(m.text(1), Origin::Sync) : stop(Origin::Sync);
     }
 }
 
@@ -305,7 +310,8 @@ RecordingManager::Status RecordingManager::status() const
     if (!oscError_.empty()) {
         s.network = oscError_;
     } else if (oscPortRunning_) {
-        s.network = "OSC control on port " + std::to_string(oscPortRunning_);
+        s.network = (settings_.oscControl ? "OSC control on port " : "Listening for other instances on port ") +
+                    std::to_string(oscPortRunning_);
         if (settings_.sync)
             s.network += " · sync: " + std::to_string(s.peers.size()) + " other instance(s)";
     }

@@ -597,7 +597,7 @@ export component AppWindow inherits Window {
                 }
                 SwitchRow {
                     label: "Synchronized recording";
-                    hint: "Finds other MotionVR Bridge instances on the network (DNS-SD) and starts and stops with them";
+                    hint: "Starts and stops with other MotionVR Bridge instances on the network that also have this on. Doesn't need OSC control.";
                     checked <=> root.rec-sync;
                     toggled(v) => {
                         root.rec-setting("sync", v ? "true" : "false");
