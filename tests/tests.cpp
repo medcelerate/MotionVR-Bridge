@@ -587,9 +587,11 @@ void testRecordingRoundTrip()
               !frames[0].frame[mvr::TrackerRole::Head].valid &&
               frames[1].frame.controllers[1].buttons == mvr::ControllerInput::A,
           "recording: frame contents");
-    std::ifstream csv((dir / "take.csv").string());
     std::string header;
-    std::getline(csv, header);
+    {
+        std::ifstream csv((dir / "take.csv").string());
+        std::getline(csv, header);
+    } // closed before cleanup: Windows can't delete open files
     check(header.rfind("time_s,Head_x", 0) == 0, "recording: csv header");
 
     // Playback: first frame becomes time 0; halfway blends.
@@ -606,7 +608,8 @@ void testRecordingRoundTrip()
     check(nearVec(playback.sample(99999, true)[mvr::TrackerRole::Hip].position, {0, 1, -1}), "playback: clamps to end");
 
     check(!mvr::record::readRecording((dir / "take.csv").string(), info, frames, error), "recording: rejects other files");
-    fs::remove_all(dir);
+    std::error_code ec;
+    fs::remove_all(dir, ec);
 }
 
 void testTakeNames()

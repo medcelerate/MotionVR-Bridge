@@ -330,6 +330,11 @@ Serialization library used to read Open3DStream packets, under the Apache Licens
    limitations under the License.
 ```
 
+## mdns
+
+DNS-SD discovery for synchronized recording, by Mattias Jansson, released into the public domain
+(`third_party/mdns`). <https://github.com/mjansson/mdns>
+
 ## Vicon DataStream SDK
 
 Proprietary software from Vicon Motion Systems, redistributed with permission. Its C++ client
