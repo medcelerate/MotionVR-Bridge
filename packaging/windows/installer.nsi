@@ -41,6 +41,7 @@ VIAddVersionKey "CompanyName" "Virtualworx"
 VIAddVersionKey "LegalCopyright" "Virtualworx"
 VIAddVersionKey "FileDescription" "${PRODUCT} installer"
 
+!insertmacro MUI_PAGE_LICENSE "${STAGE}\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !ifndef DRIVER_ONLY
@@ -60,6 +61,8 @@ Section "Install"
   CreateShortCut "$SMPROGRAMS\MotionVR Bridge.lnk" "$INSTDIR\MotionVRBridge.exe"
 !endif
   File "${STAGE}\register-driver.ps1"
+  File "${STAGE}\LICENSE"
+  File "${STAGE}\THIRD_PARTY_NOTICES.md"
   SetOutPath "$INSTDIR\driver"
   File /r "${STAGE}\driver\motionvrbridge"
 
@@ -89,6 +92,8 @@ Section "Uninstall"
   Delete "$INSTDIR\MotionVRBridge.exe"
   Delete "$INSTDIR\*.dll"
   Delete "$INSTDIR\register-driver.ps1"
+  Delete "$INSTDIR\LICENSE"
+  Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
   RMDir /r "$INSTDIR\driver"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"

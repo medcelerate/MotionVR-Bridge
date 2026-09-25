@@ -20,4 +20,4 @@ and optionally your hands as controllers), then press Start.
 
 See the [guide](docs/GUIDE.md) for setup and building from source.
 
-Designed by [Virtualworx](https://virtualworx.io).
+Designed by [Virtualworx](https://virtualworx.io). Licensed under the [GPL-3.0](LICENSE).

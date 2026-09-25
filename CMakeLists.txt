@@ -220,6 +220,13 @@ if (MVR_BUILD_DRIVER)
     endif()
 endif()
 
+# --- License files in every package -------------------------------------------
+if (APPLE AND MVR_BUILD_APP)
+    install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION MotionVRBridge.app/Contents/Resources)
+elseif (MVR_BUILD_APP OR MVR_BUILD_DRIVER)
+    install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION .)
+endif()
+
 # --- Tests -------------------------------------------------------------------
 if (MVR_BUILD_TESTS)
     enable_testing()
