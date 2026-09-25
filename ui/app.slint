@@ -47,6 +47,44 @@ component Panel inherits Rectangle {
     }
 }
 
+// A setting with its label and hint on the left and the switch on the right.
+component SwitchRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> hint;
+    in property <bool> enabled: true;
+    in-out property <bool> checked;
+    callback toggled(bool);
+    spacing: 16px;
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 3px;
+        Text {
+            text: root.label;
+            font-size: 13px;
+            wrap: word-wrap;
+            color: root.enabled ? Palette.foreground : Theme.muted;
+        }
+        if root.hint != "": Text {
+            text: root.hint;
+            font-size: 11px;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        Switch {
+            checked <=> root.checked;
+            enabled: root.enabled;
+            toggled => {
+                root.toggled(self.checked);
+            }
+        }
+    }
+}
+
 component ConfigPanel inherits VerticalLayout {
     in property <[ConfigField]> fields;
     in property <bool> editable: true;
@@ -78,12 +116,13 @@ component ConfigPanel inherits VerticalLayout {
                 root.edited(i, t);
             }
         }
-        if f.kind == 2: Switch {
-            text: f.label;
+        if f.kind == 2: SwitchRow {
+            label: f.label;
+            hint: f.hint;
             checked: f.value == "true";
             enabled: root.editable;
-            toggled => {
-                root.edited(i, self.checked ? "true" : "false");
+            toggled(v) => {
+                root.edited(i, v ? "true" : "false");
             }
         }
         // Actions act on a running stream, so they're enabled only while
@@ -95,7 +134,7 @@ component ConfigPanel inherits VerticalLayout {
                 root.action(i);
             }
         }
-        if f.hint != "": Text {
+        if f.hint != "" && f.kind != 2: Text {
             text: f.hint;
             font-size: 11px;
             color: Theme.muted;
@@ -245,24 +284,6 @@ component RecordButton inherits Rectangle {
         clicked => {
             root.clicked();
         }
-    }
-}
-
-component SettingSwitch inherits VerticalLayout {
-    in property <string> label;
-    in property <string> hint;
-    in-out property <bool> checked;
-    callback toggled(bool);
-    spacing: 2px;
-    Switch {
-        text: root.label;
-        checked <=> root.checked;
-        toggled => {
-            root.toggled(self.checked);
-        }
-    }
-    if root.hint != "": StatusText {
-        text: root.hint;
     }
 }
 
@@ -513,7 +534,7 @@ export component AppWindow inherits Window {
 
             VerticalLayout {
                 padding: 20px;
-                spacing: 14px;
+                spacing: 18px;
                 Text {
                     text: "RECORDING";
                     font-size: 11px;
@@ -551,7 +572,7 @@ export component AppWindow inherits Window {
                         }
                     }
                 }
-                SettingSwitch {
+                SwitchRow {
                     label: "Also save CSV";
                     hint: "A spreadsheet-friendly copy next to each .mvb (MessagePack) take";
                     checked <=> root.rec-csv;
@@ -559,7 +580,7 @@ export component AppWindow inherits Window {
                         root.rec-setting("csv", v ? "true" : "false");
                     }
                 }
-                SettingSwitch {
+                SwitchRow {
                     label: "OSC control";
                     hint: "/mvb/record 1|0 [take], /mvb/record/start, /stop, /toggle";
                     checked <=> root.rec-osc;
@@ -574,7 +595,7 @@ export component AppWindow inherits Window {
                         root.rec-setting("osc_port", v);
                     }
                 }
-                SettingSwitch {
+                SwitchRow {
                     label: "Synchronized recording";
                     hint: "Finds other MotionVR Bridge instances on the network (DNS-SD) and starts and stops with them";
                     checked <=> root.rec-sync;
