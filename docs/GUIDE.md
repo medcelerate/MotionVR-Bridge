@@ -29,6 +29,7 @@ cmake --build build
 |---|---|
 | Captury Live | Uses [RemoteCaptury](https://github.com/thecaptury/RemoteCaptury). Connects asynchronously and reconnects on its own. Leave the host empty to auto-discover over multicast. Follows the first actor that streams unless you set an Actor ID. |
 | Vicon DataStream | Optional, needs the Vicon DataStream SDK (see below). Connects to Shogun, Nexus, Tracker or Evoke (default `localhost:801`). Maps segments by name: Shogun skeletons (`Hips`, `LeftForeArm`, `LeftLeg`…), Plug-in Gait (`Pelvis`, `LRadius`, `LTibia`…), or rigid-body objects named after body parts (`Waist`, `LeftFoot`, `Head`…). Named rigid bodies win over skeleton segments. |
+| Open3DStream | Receives [Open3DStream](https://www.open3dstream.com/) from MotionBuilder, Maya, Unreal or any other sender. Pick the protocol that pairs with the sender's (Publish → NNG Subscribe, Pair Server ↔ Pair Client, Pipeline Push → NNG Pipeline Pull, UDP → UDP) and its address (default `tcp://127.0.0.1:6001`; for UDP, `udp://0.0.0.0:<port>` to listen). Axes and units come from the stream; the fallbacks apply only to senders that don't send them. Joints are matched by name (HumanIK, Mixamo, Unreal and Shogun names), and single-node subjects named after a body part (`Waist`, `LeftFoot`…) count as rigid bodies. |
 | Test Pattern | A synthetic body that marches and waves, for testing targets without a capture rig. |
 
 ### Vicon DataStream SDK

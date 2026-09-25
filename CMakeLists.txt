@@ -13,12 +13,43 @@ find_package(Threads REQUIRED)
 # --- Shared code (app + driver) ----------------------------------------------
 add_library(mvr_common STATIC
     src/core/HandCalibration.cpp
+    src/core/JointNames.cpp
     src/net/UdpSocket.cpp
 )
 target_include_directories(mvr_common PUBLIC src)
 set_target_properties(mvr_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if (WIN32)
     target_link_libraries(mvr_common PUBLIC ws2_32)
+endif()
+
+# --- Open3DStream decoding (app + tests) --------------------------------------
+if (MVR_BUILD_APP OR MVR_BUILD_TESTS)
+    include(FetchContent)
+    # FlatBuffers: headers plus the flatc compiler, to generate the reader
+    # from Open3DStream's schema.
+    set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(FLATBUFFERS_INSTALL OFF CACHE BOOL "" FORCE)
+    set(FLATBUFFERS_BUILD_FLATLIB OFF CACHE BOOL "" FORCE)
+    set(FLATBUFFERS_BUILD_FLATHASH OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(flatbuffers
+        GIT_REPOSITORY https://github.com/google/flatbuffers.git
+        GIT_TAG v25.12.19
+        GIT_SHALLOW TRUE
+        EXCLUDE_FROM_ALL)
+    FetchContent_MakeAvailable(flatbuffers)
+
+    set(O3DS_SCHEMA ${CMAKE_CURRENT_SOURCE_DIR}/third_party/open3dstream/o3ds.fbs)
+    set(O3DS_GENERATED_DIR ${CMAKE_BINARY_DIR}/o3ds_generated)
+    add_custom_command(
+        OUTPUT ${O3DS_GENERATED_DIR}/o3ds_generated.h
+        COMMAND flatc --cpp -o ${O3DS_GENERATED_DIR} ${O3DS_SCHEMA}
+        DEPENDS flatc ${O3DS_SCHEMA}
+        COMMENT "Generating Open3DStream reader")
+
+    add_library(mvr_o3ds STATIC src/o3ds/O3dsDecoder.cpp ${O3DS_GENERATED_DIR}/o3ds_generated.h)
+    target_include_directories(mvr_o3ds PUBLIC src PRIVATE ${O3DS_GENERATED_DIR}
+        ${flatbuffers_SOURCE_DIR}/include)
+    target_link_libraries(mvr_o3ds PUBLIC mvr_common)
 endif()
 
 # --- App ---------------------------------------------------------------------
@@ -73,7 +104,23 @@ if (MVR_BUILD_APP)
         src/sinks/SteamVRSink.cpp
         src/sinks/VRChatOscSink.cpp
     )
-    target_link_libraries(MotionVRBridge PRIVATE mvr_common Slint::Slint RemoteCaptury Threads::Threads)
+    # NNG, the messaging library Open3DStream senders use. Static, even though
+    # Slint turns BUILD_SHARED_LIBS on.
+    set(NNG_TESTS OFF CACHE BOOL "" FORCE)
+    set(NNG_TOOLS OFF CACHE BOOL "" FORCE)
+    set(NNG_ENABLE_NNGCAT OFF CACHE BOOL "" FORCE)
+    set(NNG_ENABLE_TLS OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF)
+    FetchContent_Declare(nng
+        GIT_REPOSITORY https://github.com/nanomsg/nng.git
+        GIT_TAG v1.12.4
+        GIT_SHALLOW TRUE
+        EXCLUDE_FROM_ALL)
+    FetchContent_MakeAvailable(nng)
+    unset(BUILD_SHARED_LIBS)
+
+    target_sources(MotionVRBridge PRIVATE src/sources/Open3DStreamSource.cpp)
+    target_link_libraries(MotionVRBridge PRIVATE mvr_common mvr_o3ds nng Slint::Slint RemoteCaptury Threads::Threads)
     slint_target_sources(MotionVRBridge ui/app.slint NAMESPACE ui)
     # App icon (regenerate with packaging/icon/make_icon.py).
     if (APPLE)
@@ -259,6 +306,7 @@ endif()
 if (MVR_BUILD_TESTS)
     enable_testing()
     add_executable(mvr_tests tests/tests.cpp)
-    target_link_libraries(mvr_tests PRIVATE mvr_driver_core)
+    target_include_directories(mvr_tests PRIVATE ${O3DS_GENERATED_DIR} ${flatbuffers_SOURCE_DIR}/include)
+    target_link_libraries(mvr_tests PRIVATE mvr_driver_core mvr_o3ds)
     add_test(NAME mvr_tests COMMAND mvr_tests)
 endif()

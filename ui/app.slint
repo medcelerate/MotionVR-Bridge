@@ -2,9 +2,11 @@ import { Button, ComboBox, LineEdit, Palette, ScrollView, Switch } from "std-wid
 
 export struct ConfigField {
     label: string,
-    kind: int, // 0 text, 1 number, 2 bool, 3 action button
+    kind: int, // 0 text, 1 number, 2 bool, 3 action button, 4 choice
     value: string,
     hint: string,
+    options: [string], // choice only
+    selected: int,     // choice only: index of value in options
 }
 
 export struct TrackerIndicator {
@@ -54,9 +56,17 @@ component ConfigPanel inherits VerticalLayout {
 
     for f[i] in root.fields: VerticalLayout {
         spacing: 4px;
-        if f.kind < 2: Text {
+        if f.kind < 2 || f.kind == 4: Text {
             text: f.label;
             font-size: 12px;
+        }
+        if f.kind == 4: ComboBox {
+            model: f.options;
+            current-index: f.selected;
+            enabled: root.editable;
+            selected(v) => {
+                root.edited(i, v);
+            }
         }
         if f.kind < 2: LineEdit {
             text: f.value;

@@ -1,5 +1,7 @@
 #include "sources/ViconSource.h"
 
+#include "core/JointNames.h"
+
 #include "DataStreamClient.h"
 
 #include <algorithm>
@@ -17,37 +19,6 @@ namespace vds = ViconDataStreamSDK::CPP;
 namespace mvr {
 
 namespace {
-
-// Lower-case with separators removed, so "Left_Foot", "left foot" and
-// "LeftFoot" all compare equal.
-std::string normalize(const std::string& s)
-{
-    std::string out;
-    for (char c : s)
-        if (std::isalnum(static_cast<unsigned char>(c)))
-            out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return out;
-}
-
-// Accepted names per role, most specific first. Covers Shogun skeletons,
-// Plug-in Gait, and typical rigid-body object names.
-const std::array<std::vector<std::string>, kRoleCount>& roleAliases()
-{
-    static const std::array<std::vector<std::string>, kRoleCount> aliases = {{
-        /* Head       */ {"head", "hmd"},
-        /* Chest      */ {"spine3", "spine2", "chest", "upperchest", "thorax", "spine1"},
-        /* Hip        */ {"hips", "pelvis", "hip", "waist"},
-        /* LeftElbow  */ {"leftforearm", "leftelbow", "leftlowerarm", "lradius", "lelbow"},
-        /* RightElbow */ {"rightforearm", "rightelbow", "rightlowerarm", "rradius", "relbow"},
-        /* LeftHand   */ {"lefthand", "leftwrist", "lhand"},
-        /* RightHand  */ {"righthand", "rightwrist", "rhand"},
-        /* LeftKnee   */ {"leftleg", "leftknee", "leftlowerleg", "leftshin", "ltibia", "lknee"},
-        /* RightKnee  */ {"rightleg", "rightknee", "rightlowerleg", "rightshin", "rtibia", "rknee"},
-        /* LeftFoot   */ {"leftfoot", "leftankle", "lfoot", "lankle"},
-        /* RightFoot  */ {"rightfoot", "rightankle", "rfoot", "rankle"},
-    }};
-    return aliases;
-}
 
 struct Binding {
     std::string subject;
@@ -95,12 +66,12 @@ Bindings ViconSource::Worker::bind(vds::Client& client, std::string& summary) co
     const unsigned subjects = client.GetSubjectCount().SubjectCount;
     for (unsigned s = 0; s < subjects; ++s) {
         const std::string subject = client.GetSubjectName(s).SubjectName;
-        if (!subjectFilter.empty() && normalize(subject) != normalize(subjectFilter))
+        if (!subjectFilter.empty() && normalizeJointName(subject) != normalizeJointName(subjectFilter))
             continue;
         const unsigned segments = client.GetSegmentCount(subject).SegmentCount;
         if (segments == 1) {
             const std::string segment = client.GetSegmentName(subject, 0).SegmentName;
-            candidates.push_back({normalize(subject), {subject, segment}, false});
+            candidates.push_back({normalizeJointName(subject), {subject, segment}, false});
             continue;
         }
         // Without a filter, only follow the first skeleton so two performers
@@ -112,14 +83,14 @@ Bindings ViconSource::Worker::bind(vds::Client& client, std::string& summary) co
         }
         for (unsigned g = 0; g < segments; ++g) {
             const std::string segment = client.GetSegmentName(subject, g).SegmentName;
-            candidates.push_back({normalize(segment), {subject, segment}, true});
+            candidates.push_back({normalizeJointName(segment), {subject, segment}, true});
         }
     }
 
     Bindings bindings;
     int bound = 0;
     for (int r = 0; r < kRoleCount; ++r) {
-        for (const std::string& alias : roleAliases()[r]) {
+        for (const std::string& alias : roleAliases(static_cast<TrackerRole>(r))) {
             // Named rigid bodies win over skeleton segments with the same name.
             auto best = std::find_if(candidates.begin(), candidates.end(),
                                      [&](const Candidate& c) { return !c.skeleton && c.label == alias; });

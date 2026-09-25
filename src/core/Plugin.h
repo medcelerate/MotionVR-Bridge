@@ -13,13 +13,15 @@ namespace mvr {
 // A user-editable setting shown in the UI next to a source or target.
 struct ConfigField {
     // Action is a button, only enabled while running; it triggers runAction(key).
-    enum class Kind { Text, Number, Bool, Action };
+    // Choice is a dropdown whose value is one of `options`.
+    enum class Kind { Text, Number, Bool, Action, Choice };
 
     std::string key;
     std::string label;
     Kind kind = Kind::Text;
     std::string value;
     std::string hint;
+    std::vector<std::string> options;
 };
 
 using Config = std::vector<ConfigField>;

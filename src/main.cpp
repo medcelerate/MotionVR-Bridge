@@ -3,6 +3,7 @@
 #include "core/Bridge.h"
 #include "core/Plugin.h"
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -50,6 +51,11 @@ std::shared_ptr<slint::VectorModel<ui::ConfigField>> toUiConfig(const mvr::Confi
         row.kind = static_cast<int>(f.kind);
         row.value = slint::SharedString(f.value);
         row.hint = slint::SharedString(f.hint);
+        auto options = std::make_shared<slint::VectorModel<slint::SharedString>>();
+        for (const std::string& o : f.options)
+            options->push_back(slint::SharedString(o));
+        row.options = options;
+        row.selected = static_cast<int>(std::find(f.options.begin(), f.options.end(), f.value) - f.options.begin());
         rows.push_back(row);
     }
     return std::make_shared<slint::VectorModel<ui::ConfigField>>(std::move(rows));

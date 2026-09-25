@@ -2,6 +2,9 @@
 
 #include "PlayspaceAlignment.h"
 #include "core/HandCalibration.h"
+#include "core/JointNames.h"
+#include "o3ds/O3dsDecoder.h"
+#include "o3ds_generated.h"
 #include "StreamReceiver.h"
 #include "net/UdpSocket.h"
 #include "protocol/TrackerStream.h"
@@ -176,6 +179,154 @@ void testHandCalibration()
     check(near(palm.length(), mvr::HandCalibration::kPalmOffset, 1e-4f), "hands: palm offset");
 }
 
+namespace D = O3DS::Data;
+
+// Builds an Open3DStream packet with one subject (performer or rigid body).
+struct O3dsNode {
+    int parent;
+    const char* name;
+    mvr::Vec3 t;
+    mvr::Quat r;
+};
+
+std::vector<uint8_t> o3dsDefinition(bool performer, const char* name, const char* uuid,
+                                    const std::vector<O3dsNode>& nodes, D::Direction x, D::Direction y,
+                                    D::Direction z, D::DistanceUnit unit)
+{
+    flatbuffers::FlatBufferBuilder b;
+    std::vector<flatbuffers::Offset<D::Transform>> transforms;
+    for (const O3dsNode& n : nodes) {
+        const D::Translation t(n.t.x, n.t.y, n.t.z);
+        const D::Rotation r(n.r.x, n.r.y, n.r.z, n.r.w);
+        const D::Scale s(1, 1, 1);
+        const std::vector<int8_t> order = {D::Component_Translation, D::Component_Rotation, D::Component_Scale};
+        transforms.push_back(D::CreateTransformDirect(b, n.parent, n.name, &t, &r, &s, nullptr, &order));
+    }
+    auto data = D::CreateSubjectDataDirect(b, &transforms, name, uuid);
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<D::Performer>>> performers;
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<D::Rigidbody>>> rigidbodies;
+    if (performer)
+        performers = b.CreateVector(std::vector{D::CreatePerformer(b, data)});
+    else
+        rigidbodies = b.CreateVector(std::vector{D::CreateRigidbody(b, data)});
+    D::SubjectListBuilder list(b);
+    if (performer)
+        list.add_performers(performers);
+    else
+        list.add_rigidbodies(rigidbodies);
+    list.add_time(1.5);
+    list.add_x_axis(x);
+    list.add_y_axis(y);
+    list.add_z_axis(z);
+    list.add_distance_unit(unit);
+    b.Finish(list.Finish());
+    return {b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize()};
+}
+
+std::vector<uint8_t> o3dsRotationUpdate(const char* uuid, int node, mvr::Quat r)
+{
+    flatbuffers::FlatBufferBuilder b;
+    const std::vector<D::RotationUpdate> rotations = {D::RotationUpdate(r.x, r.y, r.z, r.w, node)};
+    auto update = D::CreateSubjectUpdateDirect(b, nullptr, &rotations, nullptr, uuid);
+    auto v = b.CreateVector(std::vector{D::CreatePerformerUpdate(b, update)});
+    D::SubjectListBuilder list(b);
+    list.add_performer_updates(v);
+    b.Finish(list.Finish());
+    return {b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize()};
+}
+
+bool nearVec(const mvr::Vec3& a, const mvr::Vec3& b, float eps = 1e-4f)
+{
+    return (a - b).length() <= eps;
+}
+
+void testO3dsSkeleton()
+{
+    using mvr::TrackerRole;
+    // Y-up, right-handed, centimeters, with MotionBuilder-style joint names.
+    const auto def = o3dsDefinition(true, "Actor1", "uuid-1",
+                                    {{-1, "Hips", {0, 100, 0}, {}},
+                                     {0, "LeftLeg", {-10, -50, 0}, {}},
+                                     {1, "LeftFoot", {0, -45, 0}, {}}},
+                                    D::Direction_Right, D::Direction_Up, D::Direction_Back,
+                                    D::DistanceUnit_Centimeter);
+    mvr::o3ds::Decoder decoder({});
+    mvr::TrackingFrame frame;
+    std::string error;
+    check(decoder.decode(def.data(), def.size(), frame, error), "o3ds: decodes definition");
+    check(frame[TrackerRole::Hip].valid && nearVec(frame[TrackerRole::Hip].position, {0, 1, 0}), "o3ds: hip position");
+    check(nearVec(frame[TrackerRole::LeftKnee].position, {-0.1f, 0.5f, 0}), "o3ds: knee follows hierarchy");
+    check(nearVec(frame[TrackerRole::LeftFoot].position, {-0.1f, 0.05f, 0}), "o3ds: foot follows hierarchy");
+    check(frame.timestampUs == 1500000, "o3ds: timestamp");
+    check(decoder.summary() == "performer Actor1 · 3/11 points mapped", "o3ds: summary");
+
+    // Turn the hips 90 degrees about +Y; the knee swings round with them.
+    const auto upd = o3dsRotationUpdate("uuid-1", 0, mvr::Quat::fromAxisAngle({0, 1, 0}, 90 * mvr::kDegToRad));
+    check(decoder.decode(upd.data(), upd.size(), frame, error), "o3ds: decodes update");
+    check(nearVec(frame[TrackerRole::LeftKnee].position, {0, 0.5f, 0.1f}), "o3ds: update applied to hierarchy");
+}
+
+void testO3dsLeftHandedRigidBody()
+{
+    using mvr::TrackerRole;
+    // Unreal-style: +X forward, +Y right, +Z up (left-handed), meters.
+    const mvr::Quat yaw = mvr::Quat::fromAxisAngle({0, 0, 1}, 90 * mvr::kDegToRad); // about sender up
+    const auto def = o3dsDefinition(false, "Waist", "rb-1", {{-1, "Waist", {2, 1, 1}, yaw}}, D::Direction_Forward,
+                                    D::Direction_Right, D::Direction_Up, D::DistanceUnit_Meter);
+    mvr::o3ds::Decoder decoder({});
+    mvr::TrackingFrame frame;
+    std::string error;
+    check(decoder.decode(def.data(), def.size(), frame, error), "o3ds: decodes rigid body");
+    const mvr::TrackerPose& hip = frame[TrackerRole::Hip];
+    // forward 2, right 1, up 1 -> canonical (+X right, +Y up, -Z forward)
+    check(hip.valid && nearVec(hip.position, {1, 1, -2}), "o3ds: left-handed position converted");
+    // A turn that maps sender forward to sender right must do the same in canonical space.
+    check(nearVec(hip.orientation.rotate({0, 0, -1}), {1, 0, 0}), "o3ds: left-handed rotation converted");
+
+    const uint8_t garbage[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    check(!decoder.decode(garbage, sizeof(garbage), frame, error), "o3ds: rejects garbage");
+}
+
+void testO3dsUdpReassembly()
+{
+    std::vector<uint8_t> payload(100);
+    for (size_t i = 0; i < payload.size(); ++i)
+        payload[i] = static_cast<uint8_t>(i);
+    auto fragment = [&](uint32_t frameId, uint32_t index) {
+        const uint32_t fragSize = 40, total = static_cast<uint32_t>(payload.size());
+        std::vector<uint8_t> d;
+        for (uint32_t v : {frameId, index, total, fragSize})
+            for (int s = 0; s < 32; s += 8)
+                d.push_back(static_cast<uint8_t>(v >> s));
+        const size_t begin = index * fragSize, end = std::min<size_t>(begin + fragSize, total);
+        d.insert(d.end(), payload.begin() + begin, payload.begin() + end);
+        return d;
+    };
+
+    mvr::o3ds::UdpReassembler r;
+    std::vector<uint8_t> out;
+    auto f2 = fragment(7, 2), f0 = fragment(7, 0), f1 = fragment(7, 1);
+    check(!r.add(f2.data(), f2.size(), out) && !r.add(f0.data(), f0.size(), out) && !r.add(f0.data(), f0.size(), out),
+          "o3ds udp: waits for all fragments");
+    check(r.add(f1.data(), f1.size(), out) && out == payload, "o3ds udp: reassembles out-of-order fragments");
+    auto late = fragment(6, 0);
+    check(!r.add(late.data(), 10, out), "o3ds udp: rejects truncated fragment");
+}
+
+void testJointNames()
+{
+    using mvr::TrackerRole;
+    check(mvr::normalizeJointName("mixamorig:Left_Fore Arm") == "leftforearm", "names: strips namespace and separators");
+    const std::vector<std::string> unreal = {"root", "pelvis", "spine_03", "lowerarm_l", "calf_r", "foot_l"};
+    std::vector<std::string> normalized;
+    for (const auto& n : unreal)
+        normalized.push_back(mvr::normalizeJointName(n));
+    check(mvr::findRole(TrackerRole::Hip, normalized) == 1 && mvr::findRole(TrackerRole::Chest, normalized) == 2 &&
+              mvr::findRole(TrackerRole::LeftElbow, normalized) == 3 &&
+              mvr::findRole(TrackerRole::RightKnee, normalized) == 4 && mvr::findRole(TrackerRole::Head, normalized) == -1,
+          "names: Unreal skeleton");
+}
+
 } // namespace
 
 int main()
@@ -185,6 +336,10 @@ int main()
     testReceiverKeepsNewestPacket();
     testQuaternionBasis();
     testHandCalibration();
+    testO3dsSkeleton();
+    testO3dsLeftHandedRigidBody();
+    testO3dsUdpReassembly();
+    testJointNames();
     std::printf("%d failure(s)\n", failures);
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

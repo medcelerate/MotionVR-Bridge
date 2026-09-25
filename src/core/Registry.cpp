@@ -3,6 +3,7 @@
 #include "sinks/SteamVRSink.h"
 #include "sinks/VRChatOscSink.h"
 #include "sources/CapturySource.h"
+#include "sources/Open3DStreamSource.h"
 #include "sources/TestPatternSource.h"
 #ifdef MVR_HAVE_VICON
 #include "sources/ViconSource.h"
@@ -63,6 +64,7 @@ const std::vector<SourceInfo>& availableSources()
 #ifdef MVR_HAVE_VICON
         {"Vicon DataStream", [] { return std::make_unique<ViconSource>(); }},
 #endif
+        {"Open3DStream", [] { return std::make_unique<Open3DStreamSource>(); }},
         {"Test Pattern", [] { return std::make_unique<TestPatternSource>(); }},
     };
     return sources;
