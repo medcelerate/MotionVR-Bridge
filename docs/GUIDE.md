@@ -31,6 +31,7 @@ cmake --build build
 | Vicon DataStream | Optional, needs the Vicon DataStream SDK (see below). Connects to Shogun, Nexus, Tracker or Evoke (default `localhost:801`). Maps segments by name: Shogun skeletons (`Hips`, `LeftForeArm`, `LeftLeg`…), Plug-in Gait (`Pelvis`, `LRadius`, `LTibia`…), or rigid-body objects named after body parts (`Waist`, `LeftFoot`, `Head`…). Named rigid bodies win over skeleton segments. |
 | Xsens MVN | Receives MVN Animate / Analyze's Network Streamer on UDP (default port 9763). In MVN, add a network streaming target with this PC's IP and port and set the pose data to **Position + Quaternion**. Includes finger segments when gloves are used. Follows the first character streamed unless you enter a character number. |
 | Open3DStream | Receives [Open3DStream](https://www.open3dstream.com/) from MotionBuilder, Maya, Unreal or any other sender. Pick the protocol that pairs with the sender's (Publish → NNG Subscribe, Pair Server ↔ Pair Client, Pipeline Push → NNG Pipeline Pull, UDP → UDP) and its address (default `tcp://127.0.0.1:6001`; for UDP, `udp://0.0.0.0:<port>` to listen). Axes and units come from the stream; the fallbacks apply only to senders that don't send them. Joints are matched by name (HumanIK, Mixamo, Unreal and Shogun names), and single-node subjects named after a body part (`Waist`, `LeftFoot`…) count as rigid bodies. |
+| Recording | Plays a recorded take back into any target (see [Recording](#recording)). |
 | Test Pattern | A synthetic body that marches and waves, for testing targets without a capture rig. |
 
 ### Vicon DataStream SDK
@@ -40,6 +41,58 @@ The Vicon DataStream SDK 1.13 client library is included in `third_party/ViconDa
 different SDK version, pass `-DVICON_SDK_DIR=<folder containing DataStreamClient.h and the CPP library>`.
 
 The Linux library needs glibc 2.38 or newer (Ubuntu 24.04+, Fedora 39+).
+
+## Recording
+
+Press **Record** while streaming to save everything the source sends: body points, finger curls
+and controller input. Takes go to `Documents/MotionVR Bridge/Recordings` (change it under
+**Recording…**), named after the date and time unless a take name is given.
+
+To play a take back, pick the **Recording** source and the take. **Speed** plays slower or faster.
+With **Interpolate** on (the default), frames are generated at a steady **Output rate** by
+blending between recorded frames, so slow motion stays smooth instead of repeating frames;
+turn it off to replay the exact recorded frames.
+
+### OSC control
+
+Turn on **OSC control** under **Recording…** to start and stop recording from any OSC tool
+(TouchDesigner, QLab, a DAW…). Send to this machine on the OSC port (default 9100):
+
+| Address | Arguments | |
+|---|---|---|
+| `/mvb/record` | `1` or `0`, optional take name | start / stop |
+| `/mvb/record/start` | optional take name | start |
+| `/mvb/record/stop` | | stop |
+| `/mvb/record/toggle` | | start or stop |
+
+### Synchronized recording
+
+Turn on **Synchronized recording** on each machine. Instances find each other on the local
+network with DNS-SD (Bonjour, service `_mvb._udp`), and **Recording…** lists the ones found.
+Starting or stopping on any of them (button or OSC) does the same on all of them, under the same
+take name with each machine's name appended, e.g. `Scene 1 - Studio A.mvb`. Every file stores its
+start time (`start_unix_ms`) for lining takes up afterwards. The OSC port must be reachable
+between the machines.
+
+### File format
+
+`.mvb` files are a stream of [MessagePack](https://msgpack.org) objects, so any MessagePack
+library can read them. The first object is a header describing the rest (point names, value order,
+coordinates: right-handed, +Y up, -Z forward, meters); each following object is one frame,
+`[time_us, points, fingers, controllers]`, with `nil` for points that weren't tracked.
+
+```python
+import msgpack
+
+with open("Scene 1.mvb", "rb") as f:
+    header, *frames = msgpack.Unpacker(f)
+hip = header["points"].index("Hip")
+for time_us, points, fingers, controllers in frames:
+    if points[hip]:
+        x, y, z, qx, qy, qz, qw = points[hip]
+```
+
+**Also save CSV** writes a spreadsheet-friendly copy next to each take (one row per frame).
 
 ## Targets
 

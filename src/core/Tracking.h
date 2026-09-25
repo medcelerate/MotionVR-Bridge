@@ -97,6 +97,25 @@ struct Quat {
         return {axis.x * s, axis.y * s, axis.z * s, std::cos(radians * 0.5f)};
     }
 
+    // Spherical interpolation along the shorter arc; t in [0, 1].
+    static Quat slerp(const Quat& a, Quat b, float t)
+    {
+        float d = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+        if (d < 0) {
+            b = {-b.x, -b.y, -b.z, -b.w};
+            d = -d;
+        }
+        float wa = 1 - t, wb = t;
+        if (d < 0.9995f) {
+            const float theta = std::acos(d), s = std::sin(theta);
+            wa = std::sin((1 - t) * theta) / s;
+            wb = std::sin(t * theta) / s;
+        }
+        Quat q{a.x * wa + b.x * wb, a.y * wa + b.y * wb, a.z * wa + b.z * wb, a.w * wa + b.w * wb};
+        const float n = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+        return {q.x / n, q.y / n, q.z / n, q.w / n};
+    }
+
     // Angle in radians between two orientations.
     static float angleBetween(const Quat& a, const Quat& b)
     {

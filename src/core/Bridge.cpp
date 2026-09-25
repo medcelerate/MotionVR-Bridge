@@ -129,6 +129,8 @@ void Bridge::onFrame(const TrackingFrame& frame)
         lastFrameTime_ = now;
     }
 
+    if (tap_)
+        tap_(frame);
     sink_->send(frame, forward);
 }
 

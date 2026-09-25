@@ -15,7 +15,11 @@ add_library(mvr_common STATIC
     src/core/Fingers.cpp
     src/core/HandCalibration.cpp
     src/core/JointNames.cpp
+    src/net/OscMessage.cpp
     src/net/UdpSocket.cpp
+    src/record/MsgPack.cpp
+    src/record/Playback.cpp
+    src/record/RecordingFile.cpp
 )
 target_include_directories(mvr_common PUBLIC src)
 set_target_properties(mvr_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -120,7 +124,16 @@ if (MVR_BUILD_APP)
     FetchContent_MakeAvailable(nng)
     unset(BUILD_SHARED_LIBS)
 
-    target_sources(MotionVRBridge PRIVATE src/sources/Open3DStreamSource.cpp src/sources/XsensSource.cpp)
+    target_sources(MotionVRBridge PRIVATE
+        src/sources/Open3DStreamSource.cpp
+        src/sources/RecordingSource.cpp
+        src/sources/XsensSource.cpp
+        src/net/Discovery.cpp
+        src/record/RecordingManager.cpp)
+    target_include_directories(MotionVRBridge PRIVATE third_party/mdns)
+    if (WIN32)
+        target_link_libraries(MotionVRBridge PRIVATE iphlpapi)
+    endif()
     target_link_libraries(MotionVRBridge PRIVATE mvr_common mvr_decoders nng Slint::Slint RemoteCaptury Threads::Threads)
     slint_target_sources(MotionVRBridge ui/app.slint NAMESPACE ui)
     # App icon (regenerate with packaging/icon/make_icon.py).
@@ -308,7 +321,8 @@ endif()
 # --- Tests -------------------------------------------------------------------
 if (MVR_BUILD_TESTS)
     enable_testing()
-    add_executable(mvr_tests tests/tests.cpp)
+    add_executable(mvr_tests tests/tests.cpp src/record/RecordingManager.cpp src/net/Discovery.cpp)
+    target_include_directories(mvr_tests PRIVATE third_party/mdns)
     target_include_directories(mvr_tests PRIVATE ${O3DS_GENERATED_DIR} ${flatbuffers_SOURCE_DIR}/include)
     target_link_libraries(mvr_tests PRIVATE mvr_driver_core mvr_decoders)
     add_test(NAME mvr_tests COMMAND mvr_tests)

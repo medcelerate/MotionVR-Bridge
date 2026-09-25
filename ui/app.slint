@@ -23,6 +23,7 @@ global Theme {
     out property <color> accent: #22d3ee;
     out property <color> hot: #f472b6;
     out property <color> idle: #64748b;
+    out property <color> recording: #ef4444;
     out property <color> streaming: #22c55e;
     out property <color> panel: Palette.alternate-background;
     out property <color> muted: Palette.foreground.transparentize(0.45);
@@ -221,6 +222,67 @@ component BodyView inherits Rectangle {
     }
 }
 
+component RecordButton inherits Rectangle {
+    in property <bool> recording;
+    in property <string> time;
+    callback clicked();
+
+    width: label.preferred-width + 32px;
+    height: 40px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.recording;
+    background: root.recording ? Theme.recording : ta.has-hover ? Theme.recording.transparentize(0.8) : transparent;
+
+    label := Text {
+        text: root.recording ? "■  Stop recording · " + root.time : "●  Record";
+        color: root.recording ? white : Theme.recording;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component SettingSwitch inherits VerticalLayout {
+    in property <string> label;
+    in property <string> hint;
+    in-out property <bool> checked;
+    callback toggled(bool);
+    spacing: 2px;
+    Switch {
+        text: root.label;
+        checked <=> root.checked;
+        toggled => {
+            root.toggled(self.checked);
+        }
+    }
+    if root.hint != "": StatusText {
+        text: root.hint;
+    }
+}
+
+component SettingField inherits VerticalLayout {
+    in property <string> label;
+    in-out property <string> value;
+    callback edited(string);
+    spacing: 4px;
+    Text {
+        text: root.label;
+        font-size: 12px;
+    }
+    LineEdit {
+        text <=> root.value;
+        edited(t) => {
+            root.edited(t);
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "MotionVR Bridge";
     icon: @image-url("icon.png");
@@ -250,6 +312,21 @@ export component AppWindow inherits Window {
     callback source-action(int);
     callback sink-action(int);
     callback start-stop-clicked();
+
+    // Recording
+    in property <bool> recording;
+    in property <string> record-time;
+    in property <string> record-message;
+    in-out property <string> rec-folder;
+    in-out property <bool> rec-csv;
+    in-out property <bool> rec-osc;
+    in-out property <string> rec-osc-port;
+    in-out property <bool> rec-sync;
+    in-out property <string> rec-name;
+    in property <string> rec-network;
+    in property <string> rec-peers;
+    callback record-clicked();
+    callback rec-setting(string, string); // key, value
     callback open-url(string);
     callback tracker-clicked(int);
 
@@ -332,6 +409,7 @@ export component AppWindow inherits Window {
                 }
                 HorizontalLayout {
                     alignment: center;
+                    spacing: 12px;
                     Button {
                         width: 180px;
                         height: 40px;
@@ -341,6 +419,20 @@ export component AppWindow inherits Window {
                             root.start-stop-clicked();
                         }
                     }
+                    RecordButton {
+                        recording: root.recording;
+                        time: root.record-time;
+                        clicked => {
+                            root.record-clicked();
+                        }
+                    }
+                    Button {
+                        height: 40px;
+                        text: "Recording…";
+                        clicked => {
+                            recording-settings.show();
+                        }
+                    }
                 }
                 if root.error-text != "": Text {
                     text: root.error-text;
@@ -348,6 +440,10 @@ export component AppWindow inherits Window {
                     font-size: 12px;
                     horizontal-alignment: center;
                     wrap: word-wrap;
+                }
+                StatusText {
+                    text: root.record-message;
+                    horizontal-alignment: center;
                 }
             }
 
@@ -392,6 +488,82 @@ export component AppWindow inherits Window {
                     clicked => {
                         root.open-url("https://virtualworx.io");
                     }
+                }
+            }
+        }
+    }
+
+    recording-settings := PopupWindow {
+        x: (root.width - 440px) / 2;
+        y: 80px;
+        width: 440px;
+        close-policy: PopupClosePolicy.close-on-click-outside;
+
+        Rectangle {
+            background: Theme.panel;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Palette.border;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: #00000080;
+
+            VerticalLayout {
+                padding: 20px;
+                spacing: 14px;
+                Text {
+                    text: "RECORDING";
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 1.5px;
+                    color: Theme.muted;
+                }
+                SettingField {
+                    label: "Folder";
+                    value <=> root.rec-folder;
+                    edited(v) => {
+                        root.rec-setting("folder", v);
+                    }
+                }
+                SettingSwitch {
+                    label: "Also save CSV";
+                    hint: "A spreadsheet-friendly copy next to each .mvb (MessagePack) take";
+                    checked <=> root.rec-csv;
+                    toggled(v) => {
+                        root.rec-setting("csv", v ? "true" : "false");
+                    }
+                }
+                SettingSwitch {
+                    label: "OSC control";
+                    hint: "/mvb/record 1|0 [take], /mvb/record/start, /stop, /toggle";
+                    checked <=> root.rec-osc;
+                    toggled(v) => {
+                        root.rec-setting("osc", v ? "true" : "false");
+                    }
+                }
+                SettingField {
+                    label: "OSC port";
+                    value <=> root.rec-osc-port;
+                    edited(v) => {
+                        root.rec-setting("osc_port", v);
+                    }
+                }
+                SettingSwitch {
+                    label: "Synchronized recording";
+                    hint: "Finds other MotionVR Bridge instances on the network (DNS-SD) and starts and stops with them";
+                    checked <=> root.rec-sync;
+                    toggled(v) => {
+                        root.rec-setting("sync", v ? "true" : "false");
+                    }
+                }
+                SettingField {
+                    label: "This instance's name";
+                    value <=> root.rec-name;
+                    edited(v) => {
+                        root.rec-setting("name", v);
+                    }
+                }
+                StatusText {
+                    text: root.rec-network + (root.rec-peers != "" ? "\n" + root.rec-peers : "");
                 }
             }
         }

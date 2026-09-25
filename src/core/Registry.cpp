@@ -4,6 +4,7 @@
 #include "sinks/VRChatOscSink.h"
 #include "sources/CapturySource.h"
 #include "sources/Open3DStreamSource.h"
+#include "sources/RecordingSource.h"
 #include "sources/TestPatternSource.h"
 #include "sources/XsensSource.h"
 #ifdef MVR_HAVE_VICON
@@ -67,6 +68,7 @@ const std::vector<SourceInfo>& availableSources()
 #endif
         {"Xsens MVN", [] { return std::make_unique<XsensSource>(); }},
         {"Open3DStream", [] { return std::make_unique<Open3DStreamSource>(); }},
+        {"Recording", [] { return std::make_unique<RecordingSource>(); }},
         {"Test Pattern", [] { return std::make_unique<TestPatternSource>(); }},
     };
     return sources;

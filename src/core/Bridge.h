@@ -5,6 +5,7 @@
 
 #include <array>
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -35,6 +36,10 @@ public:
     void stop();
     bool running() const;
 
+    // Called with every frame from the source (before filtering), e.g. to
+    // record it. Set before start().
+    void setFrameTap(std::function<void(const TrackingFrame&)> tap) { tap_ = std::move(tap); }
+
     void runSourceAction(const std::string& key);
     void runSinkAction(const std::string& key);
 
@@ -50,6 +55,7 @@ private:
 
     std::unique_ptr<TrackingSource> source_;
     std::unique_ptr<TrackingSink> sink_;
+    std::function<void(const TrackingFrame&)> tap_;
 
     mutable std::mutex mutex_;
     RoleSet enabled_;

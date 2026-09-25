@@ -4,7 +4,12 @@
 #include "core/Fingers.h"
 #include "core/HandCalibration.h"
 #include "core/JointNames.h"
+#include "net/OscMessage.h"
 #include "o3ds/O3dsDecoder.h"
+#include "record/MsgPack.h"
+#include "record/Playback.h"
+#include "record/RecordingManager.h"
+#include "record/RecordingFile.h"
 #include "xsens/MvnDecoder.h"
 #include "o3ds_generated.h"
 #include "StreamReceiver.h"
@@ -12,6 +17,8 @@
 #include "protocol/TrackerStream.h"
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <cstring>
 #include <cstdlib>
 #include <random>
@@ -498,6 +505,119 @@ void testXsensMvn()
     check(!decoder.add(junk, sizeof(junk), frame, error) && error.empty(), "xsens: ignores non-MVN packets");
 }
 
+void testMsgPack()
+{
+    mvr::msgpack::Writer w;
+    w.map(3);
+    w.str("n");
+    w.uint(300);
+    w.str("f");
+    w.f32(1.5f);
+    w.str("a");
+    w.array(3);
+    w.nil();
+    w.boolean(true);
+    w.str(std::string(40, 'x')); // str8
+    // Spot-check the exact bytes of a few encodings against the spec.
+    const auto& b = w.bytes();
+    check(b[0] == 0x83 && b[1] == 0xa1 && b[2] == 'n' && b[3] == 0xcd && b[4] == 0x01 && b[5] == 0x2c,
+          "msgpack: fixmap, fixstr, uint16");
+    size_t pos = 0;
+    mvr::msgpack::Value v;
+    check(mvr::msgpack::read(b.data(), b.size(), pos, v) && pos == b.size(), "msgpack: reads back");
+    check(v.get("n") && v.get("n")->number() == 300 && v.get("f")->number() == 1.5, "msgpack: numbers");
+    const auto* a = v.get("a")->array();
+    check(a && a->size() == 3 && (*a)[0].isNil() && (*a)[1].number() == 1 && (*a)[2].text().size() == 40,
+          "msgpack: array contents");
+    pos = 0;
+    check(!mvr::msgpack::read(b.data(), b.size() - 1, pos, v), "msgpack: rejects truncated data");
+}
+
+void testOsc()
+{
+    const auto packet = mvr::osc::encode({"/mvb/record", {int32_t(1), std::string("Take 3"), 0.5f, true}});
+    auto messages = mvr::osc::decode(packet.data(), packet.size());
+    check(messages.size() == 1 && messages[0].address == "/mvb/record" && messages[0].number(0) == 1 &&
+              messages[0].text(1) == "Take 3" && messages[0].number(2) == 0.5f && messages[0].number(3) == 1,
+          "osc: round trip");
+    // A bundle holding two messages.
+    std::vector<uint8_t> bundle = {'#', 'b', 'u', 'n', 'd', 'l', 'e', 0, 0, 0, 0, 0, 0, 0, 0, 1};
+    for (const char* address : {"/mvb/record/start", "/mvb/record/stop"}) {
+        const auto m = mvr::osc::encode({address, {}});
+        const uint32_t n = static_cast<uint32_t>(m.size());
+        bundle.insert(bundle.end(), {uint8_t(n >> 24), uint8_t(n >> 16), uint8_t(n >> 8), uint8_t(n)});
+        bundle.insert(bundle.end(), m.begin(), m.end());
+    }
+    messages = mvr::osc::decode(bundle.data(), bundle.size());
+    check(messages.size() == 2 && messages[1].address == "/mvb/record/stop", "osc: bundle");
+    const uint8_t junk[] = {'/', 'a', 'b', 'c', 'd'};
+    check(mvr::osc::decode(junk, sizeof(junk)).empty(), "osc: ignores malformed packet");
+}
+
+void testRecordingRoundTrip()
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "mvb-test";
+    fs::create_directories(dir);
+    const std::string path = (dir / "take.mvb").string();
+
+    mvr::TrackingFrame a;
+    a[mvr::TrackerRole::Hip] = {true, {0, 1, 0}, {}};
+    a.fingers[0].valid = true;
+    a.fingers[0].curl[1] = 0.25f;
+    a.controllers[1].buttons = mvr::ControllerInput::A;
+    mvr::TrackingFrame b = a;
+    b[mvr::TrackerRole::Hip].position = {0, 1, -1};
+    b[mvr::TrackerRole::Hip].orientation = mvr::Quat::fromAxisAngle({0, 1, 0}, 90 * mvr::kDegToRad);
+    b.fingers[0].curl[1] = 0.75f;
+    b[mvr::TrackerRole::Head] = {true, {0, 1.7f, 0}, {}}; // only in b
+
+    mvr::record::RecordingWriter writer;
+    std::string error;
+    check(writer.open(path, {1234, "Test Pattern", "take"}, true, error), "recording: opens");
+    writer.write(1000, a);
+    writer.write(21000, b);
+    writer.close();
+
+    mvr::record::RecordingInfo info;
+    std::vector<mvr::record::RecordedFrame> frames;
+    check(mvr::record::readRecording(path, info, frames, error) && frames.size() == 2, "recording: reads back");
+    check(info.startUnixMs == 1234 && info.source == "Test Pattern" && info.take == "take", "recording: header");
+    check(frames[1].offsetUs == 21000 && nearVec(frames[1].frame[mvr::TrackerRole::Hip].position, {0, 1, -1}) &&
+              !frames[0].frame[mvr::TrackerRole::Head].valid &&
+              frames[1].frame.controllers[1].buttons == mvr::ControllerInput::A,
+          "recording: frame contents");
+    std::ifstream csv((dir / "take.csv").string());
+    std::string header;
+    std::getline(csv, header);
+    check(header.rfind("time_s,Head_x", 0) == 0, "recording: csv header");
+
+    // Playback: first frame becomes time 0; halfway blends.
+    mvr::record::Playback playback(frames);
+    check(playback.durationUs() == 20000, "playback: duration");
+    const mvr::TrackingFrame mid = playback.sample(10000, true);
+    const mvr::TrackerPose& hip = mid[mvr::TrackerRole::Hip];
+    check(nearVec(hip.position, {0, 1, -0.5f}) &&
+              sameRotation(hip.orientation, mvr::Quat::fromAxisAngle({0, 1, 0}, 45 * mvr::kDegToRad), 0.1f),
+          "playback: interpolates position and rotation");
+    check(near(mid.fingers[0].curl[1], 0.5f, 1e-5f), "playback: interpolates fingers");
+    check(mid[mvr::TrackerRole::Head].valid, "playback: one-sided point from nearer frame");
+    check(!playback.sample(10000, false)[mvr::TrackerRole::Head].valid, "playback: stepped keeps earlier frame");
+    check(nearVec(playback.sample(99999, true)[mvr::TrackerRole::Hip].position, {0, 1, -1}), "playback: clamps to end");
+
+    check(!mvr::record::readRecording((dir / "take.csv").string(), info, frames, error), "recording: rejects other files");
+    fs::remove_all(dir);
+}
+
+void testTakeNames()
+{
+    using mvr::record::sanitizeTake;
+    check(sanitizeTake("../../etc/passwd") == "_.._etc_passwd", "takes: no path traversal");
+    check(sanitizeTake("  .hidden") == "hidden" && sanitizeTake("Scene 1 (take 2)") == "Scene 1 (take 2)",
+          "takes: trims leading dots, keeps friendly names");
+    check(sanitizeTake("C:\\x") == "C__x" && sanitizeTake("...") == "", "takes: no drive or separator characters");
+}
+
 } // namespace
 
 int main()
@@ -515,6 +635,10 @@ int main()
     testFingerProtocol();
     testO3dsFingers();
     testXsensMvn();
+    testMsgPack();
+    testOsc();
+    testRecordingRoundTrip();
+    testTakeNames();
     std::printf("%d failure(s)\n", failures);
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

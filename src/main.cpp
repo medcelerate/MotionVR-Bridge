@@ -2,8 +2,11 @@
 
 #include "core/Bridge.h"
 #include "core/Plugin.h"
+#include "record/RecordingManager.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -105,7 +108,11 @@ int main()
         sinkConfigs.push_back(sinkPrototypes.back()->defaultConfig());
     }
 
+    // Declared before the bridge: the bridge's source thread writes into it.
+    mvr::record::RecordingManager recorder;
+    recorder.applySettings(recorder.settings());
     mvr::Bridge bridge;
+    bridge.setFrameTap([&](const mvr::TrackingFrame& f) { recorder.onFrame(f); });
     auto ui = ui::AppWindow::create();
 
     ui->set_source_names(toUiNames(sources));
@@ -139,7 +146,26 @@ int main()
         return snap;
     };
 
+    // Refreshes dropdown options that can change (e.g. the list of recorded
+    // takes) while keeping the user's choices.
+    auto refreshSourceOptions = [&, weak = slint::ComponentWeakHandle(ui)](bool updateUi) {
+        const int index = (*weak.lock())->get_source_index();
+        const mvr::Config fresh = sources[index].create()->defaultConfig();
+        mvr::Config& cfg = sourceConfigs[index];
+        for (size_t i = 0; i < cfg.size() && i < fresh.size(); ++i) {
+            if (cfg[i].kind != mvr::ConfigField::Kind::Choice)
+                continue;
+            cfg[i].options = fresh[i].options;
+            cfg[i].hint = fresh[i].hint;
+            if (std::find(cfg[i].options.begin(), cfg[i].options.end(), cfg[i].value) == cfg[i].options.end())
+                cfg[i].value = fresh[i].value;
+        }
+        if (updateUi)
+            (*weak.lock())->set_source_config(toUiConfig(cfg));
+    };
+
     ui->on_source_selected([&, weak = slint::ComponentWeakHandle(ui)](int index) {
+        refreshSourceOptions(false);
         (*weak.lock())->set_source_config(toUiConfig(sourceConfigs[index]));
     });
     ui->on_sink_selected([&, weak = slint::ComponentWeakHandle(ui)](int index) {
@@ -172,6 +198,7 @@ int main()
         } else {
             const int src = w->get_source_index();
             const int dst = w->get_sink_index();
+            recorder.setSourceName(sources[src].name); // for takes started from OSC or sync too
             std::string error;
             if (!bridge.start(sources[src].create(), sourceConfigs[src], sinks[dst].create(), sinkConfigs[dst], error))
                 w->set_error_text(slint::SharedString(error));
@@ -181,6 +208,42 @@ int main()
 
     ui->on_open_url([](slint::SharedString url) { openUrl(std::string(url)); });
 
+    // Recording
+    {
+        const mvr::record::RecordingSettings s = recorder.settings();
+        ui->set_rec_folder(slint::SharedString(s.folder));
+        ui->set_rec_csv(s.csv);
+        ui->set_rec_osc(s.oscControl);
+        ui->set_rec_osc_port(slint::SharedString(std::to_string(s.oscPort)));
+        ui->set_rec_sync(s.sync);
+        ui->set_rec_name(slint::SharedString(s.instanceName));
+    }
+    ui->on_record_clicked([&] { recorder.toggle(); });
+    ui->on_rec_setting([&, weak = slint::ComponentWeakHandle(ui)](slint::SharedString key, slint::SharedString value) {
+        mvr::record::RecordingSettings s = recorder.settings();
+        const std::string k(key), v(value);
+        if (k == "folder") {
+            s.folder = v;
+        } else if (k == "csv") {
+            s.csv = v == "true";
+        } else if (k == "osc") {
+            s.oscControl = v == "true";
+        } else if (k == "osc_port") {
+            char* end = nullptr;
+            const long port = std::strtol(v.c_str(), &end, 10);
+            if (v.empty() || *end != '\0' || port <= 0 || port > 65535)
+                return; // keep the last valid port while typing
+            s.oscPort = static_cast<uint16_t>(port);
+        } else if (k == "sync") {
+            s.sync = v == "true";
+        } else if (k == "name") {
+            s.instanceName = v;
+        }
+        recorder.applySettings(s);
+        if (k == "folder")
+            refreshSourceOptions(true);
+    });
+
     slint::Timer uiTimer(std::chrono::milliseconds(33), [&, weak = slint::ComponentWeakHandle(ui)] {
         auto w = *weak.lock();
         const auto snap = refreshTrackers();
@@ -188,6 +251,21 @@ int main()
         w->set_frame_rate(snap.frameRate);
         w->set_source_status(slint::SharedString(snap.sourceStatus));
         w->set_sink_status(slint::SharedString(snap.sinkStatus));
+
+        const auto rec = recorder.status();
+        if (w->get_recording() && !rec.recording && !snap.running)
+            refreshSourceOptions(true); // a new take is available to play back
+        w->set_recording(rec.recording);
+        char time[16];
+        const int secs = static_cast<int>(rec.seconds);
+        std::snprintf(time, sizeof(time), "%d:%02d", secs / 60, secs % 60);
+        w->set_record_time(time);
+        w->set_record_message(slint::SharedString(rec.message));
+        w->set_rec_network(slint::SharedString(rec.network));
+        std::string peers;
+        for (const auto& p : rec.peers)
+            peers += (peers.empty() ? "Found: " : ", ") + p.name + " (" + p.address + ")";
+        w->set_rec_peers(slint::SharedString(peers));
     });
 
     ui->run();
