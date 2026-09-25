@@ -31,7 +31,7 @@ jobs:
           - name: macOS
             os: macos-latest
           - name: Linux
-            os: ubuntu-22.04
+            os: ubuntu-24.04 # the Vicon SDK needs glibc 2.38+
 
     steps:
       - uses: actions/checkout@v4

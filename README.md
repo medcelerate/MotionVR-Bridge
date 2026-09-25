@@ -18,7 +18,7 @@ and optionally your hands as controllers), then press Start.
 | Windows (portable) | [MotionVRBridge-Windows-Portable.zip](https://github.com/medcelerate/MotionVR-Bridge/releases/latest/download/MotionVRBridge-Windows-Portable.zip) |
 | SteamVR driver only (Windows) | [MotionVRBridge-SteamVR-Driver-Setup.exe](https://github.com/medcelerate/MotionVR-Bridge/releases/latest/download/MotionVRBridge-SteamVR-Driver-Setup.exe) |
 | macOS (Apple Silicon) | [MotionVRBridge-macOS.zip](https://github.com/medcelerate/MotionVR-Bridge/releases/latest/download/MotionVRBridge-macOS.zip) |
-| Linux (x64) | [MotionVRBridge-Linux-x64.tar.gz](https://github.com/medcelerate/MotionVR-Bridge/releases/latest/download/MotionVRBridge-Linux-x64.tar.gz) |
+| Linux (x64, Ubuntu 24.04+) | [MotionVRBridge-Linux-x64.tar.gz](https://github.com/medcelerate/MotionVR-Bridge/releases/latest/download/MotionVRBridge-Linux-x64.tar.gz) |
 
 See the [guide](docs/GUIDE.md) for setup and building from source.
 

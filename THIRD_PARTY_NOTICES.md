@@ -63,6 +63,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Vicon DataStream SDK
 
-Optional. Proprietary software from Vicon Motion Systems, used under Vicon's license terms. It is
-not included in this repository. Builds that include it rely on the additional permission in
-`LICENSE-EXCEPTION`.
+Proprietary software from Vicon Motion Systems, redistributed with permission. Its C++ client
+library is included in `third_party/ViconDataStreamSDK` and in release builds, under the
+additional permission in `LICENSE-EXCEPTION`. Copyright Vicon Motion Systems Ltd.

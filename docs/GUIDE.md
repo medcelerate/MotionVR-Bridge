@@ -9,7 +9,7 @@ Release builds aren't code-signed yet:
 - **Windows:** if SmartScreen appears, choose **More info → Run anyway**.
 - **macOS:** right-click `MotionVRBridge.app` and choose **Open**, or run
   `xattr -dr com.apple.quarantine MotionVRBridge.app`.
-- **Linux:** the app needs fontconfig and xkbcommon (present on most desktops).
+- **Linux:** needs glibc 2.38+ (Ubuntu 24.04+, Fedora 39+), fontconfig and xkbcommon.
 
 ## Build
 
@@ -33,20 +33,11 @@ cmake --build build
 
 ### Vicon DataStream SDK
 
-The SDK is proprietary, so it isn't included in this repo. Download it from Vicon, then either:
+The Vicon DataStream SDK 1.13 client library is included in `third_party/ViconDataStreamSDK`
+(redistributed with permission; see its README), so every build has the Vicon source. To use a
+different SDK version, pass `-DVICON_SDK_DIR=<folder containing DataStreamClient.h and the CPP library>`.
 
-- extract the `Mac/` or `Linux64/` folder from the SDK zip into `third_party/ViconDataStreamSDK/` (this path is gitignored), or
-- on Windows, install the MSI (found automatically under `C:/Program Files/Vicon/DataStream SDK/Win64/CPP`), or
-- pass `-DVICON_SDK_DIR=<folder containing DataStreamClient.h>`.
-
-Without it, the app builds without the Vicon source. The SDK library is copied next to the executable.
-
-On macOS, a zip from the browser is quarantined, and its ad-hoc-signed dylib won't load
-("library load disallowed by system policy"). If you trust the download, clear the flag:
-
-```bash
-xattr -dr com.apple.quarantine third_party/ViconDataStreamSDK build/libViconDataStreamSDK_CPP.dylib
-```
+The Linux library needs glibc 2.38 or newer (Ubuntu 24.04+, Fedora 39+).
 
 ## Targets
 
@@ -123,10 +114,9 @@ push. Pushing a `v*` tag publishes a GitHub Release with:
 | Asset | Contents |
 |---|---|
 | `MotionVRBridge-Windows-Setup.exe` | App + SteamVR driver, registers the driver (NSIS, `packaging/windows/installer.nsi`) |
-| `MotionVRBridge-Windows-Portable.zip` | App + driver + `register-driver.ps1` |
+| `MotionVRBridge-Windows-Portable.zip` | App + driver + `register-driver.ps1` (includes the MSVC runtime) |
 | `MotionVRBridge-SteamVR-Driver-Setup.exe` | Driver only, registers it |
 | `MotionVRBridge-macOS.zip` | `MotionVRBridge.app` (Apple Silicon, unsigned) |
-| `MotionVRBridge-Linux-x64.tar.gz` | App + driver + `register-driver.sh` |
+| `MotionVRBridge-Linux-x64.tar.gz` | App + driver + `register-driver.sh` (glibc 2.38+) |
 
-CI doesn't have the Vicon SDK, so release builds don't include the Vicon source yet.
-`LICENSE-EXCEPTION` allows shipping it once Vicon's own terms permit redistributing their library.
+Release builds include the Vicon source and its SDK library (see `LICENSE-EXCEPTION`).

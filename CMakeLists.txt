@@ -94,37 +94,51 @@ if (MVR_BUILD_APP)
         target_link_options(MotionVRBridge PRIVATE /ENTRY:mainCRTStartup)
     endif()
 
-    # Vicon DataStream SDK is proprietary and not redistributed here. Point
-    # VICON_SDK_DIR at the folder with DataStreamClient.h and the CPP library
-    # (e.g. the extracted Mac/ or Linux64/ folder, or the Win64 install).
-    set(VICON_SDK_DIR "" CACHE PATH "Vicon DataStream SDK folder (optional)")
+    # Vicon DataStream SDK (proprietary, redistributed with permission) lives in
+    # third_party/ViconDataStreamSDK. VICON_SDK_DIR can point at another copy
+    # (a folder with DataStreamClient.h and the CPP library).
+    set(VICON_SDK_DIR "" CACHE PATH "Alternative Vicon DataStream SDK folder (optional)")
+    set(VICON_BUNDLED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ViconDataStreamSDK)
+    if (WIN32)
+        set(VICON_PLATFORM_DIR ${VICON_BUNDLED_DIR}/Win64)
+    elseif (APPLE)
+        set(VICON_PLATFORM_DIR ${VICON_BUNDLED_DIR}/Mac)
+    else()
+        set(VICON_PLATFORM_DIR ${VICON_BUNDLED_DIR}/Linux64)
+    endif()
     find_path(VICON_INCLUDE_DIR DataStreamClient.h
-        HINTS ${VICON_SDK_DIR}
-        PATHS
-            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ViconDataStreamSDK/Mac
-            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ViconDataStreamSDK/Linux64
-            "C:/Program Files/Vicon/DataStream SDK/Win64/CPP"
-        NO_DEFAULT_PATH)
-    find_library(VICON_LIBRARY ViconDataStreamSDK_CPP HINTS ${VICON_INCLUDE_DIR} NO_DEFAULT_PATH)
-    if (VICON_INCLUDE_DIR AND VICON_LIBRARY)
-        message(STATUS "Vicon DataStream SDK: ${VICON_INCLUDE_DIR}")
-        target_sources(MotionVRBridge PRIVATE src/sources/ViconSource.cpp)
-        target_include_directories(MotionVRBridge PRIVATE ${VICON_INCLUDE_DIR})
-        target_link_libraries(MotionVRBridge PRIVATE ${VICON_LIBRARY})
-        target_compile_definitions(MotionVRBridge PRIVATE MVR_HAVE_VICON)
-        # The SDK library is loaded from next to the executable.
+        HINTS ${VICON_SDK_DIR} ${VICON_BUNDLED_DIR}/include NO_DEFAULT_PATH)
+    if (WIN32)
+        find_file(VICON_RUNTIME ViconDataStreamSDK_CPP.dll HINTS ${VICON_SDK_DIR} ${VICON_PLATFORM_DIR} NO_DEFAULT_PATH)
+        find_file(VICON_IMPLIB ViconDataStreamSDK_CPP.lib HINTS ${VICON_SDK_DIR} ${VICON_PLATFORM_DIR} NO_DEFAULT_PATH)
+    else()
+        find_library(VICON_RUNTIME ViconDataStreamSDK_CPP HINTS ${VICON_SDK_DIR} ${VICON_PLATFORM_DIR} NO_DEFAULT_PATH)
+    endif()
+
+    if (VICON_INCLUDE_DIR AND VICON_RUNTIME AND (NOT WIN32 OR VICON_IMPLIB))
+        message(STATUS "Vicon DataStream SDK: ${VICON_RUNTIME}")
+        add_library(ViconSDK::CPP SHARED IMPORTED)
+        set_target_properties(ViconSDK::CPP PROPERTIES
+            IMPORTED_LOCATION ${VICON_RUNTIME}
+            INTERFACE_INCLUDE_DIRECTORIES ${VICON_INCLUDE_DIR})
         if (WIN32)
-            file(GLOB VICON_RUNTIME "${VICON_INCLUDE_DIR}/*.dll")
-        elseif (APPLE)
-            file(GLOB VICON_RUNTIME "${VICON_INCLUDE_DIR}/libViconDataStreamSDK_CPP*.dylib")
-        else()
-            file(GLOB VICON_RUNTIME "${VICON_INCLUDE_DIR}/libViconDataStreamSDK_CPP*.so*")
+            set_target_properties(ViconSDK::CPP PROPERTIES IMPORTED_IMPLIB ${VICON_IMPLIB})
+        elseif (NOT APPLE)
+            # The Linux library has no SONAME; without this the executable
+            # would record the library's absolute build-time path.
+            set_target_properties(ViconSDK::CPP PROPERTIES IMPORTED_NO_SONAME TRUE)
             set_property(TARGET MotionVRBridge APPEND PROPERTY BUILD_RPATH "$ORIGIN")
         endif()
+        target_sources(MotionVRBridge PRIVATE src/sources/ViconSource.cpp)
+        target_link_libraries(MotionVRBridge PRIVATE ViconSDK::CPP)
+        target_compile_definitions(MotionVRBridge PRIVATE MVR_HAVE_VICON)
+        # The SDK library is loaded from next to the executable (its macOS
+        # install name is @executable_path).
         add_custom_command(TARGET MotionVRBridge POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${VICON_RUNTIME} $<TARGET_FILE_DIR:MotionVRBridge>)
     else()
-        message(STATUS "Vicon DataStream SDK not found; building without the Vicon source (set VICON_SDK_DIR)")
+        set(VICON_RUNTIME "")
+        message(STATUS "Vicon DataStream SDK not found; building without the Vicon source")
     endif()
 
     # Packaging layout: the app at the root (a .app bundle on macOS) with the
@@ -142,6 +156,11 @@ if (MVR_BUILD_APP)
         install(FILES $<TARGET_FILE:slint_cpp-shared> packaging/linux/motionvrbridge.png DESTINATION .)
     else()
         install(FILES $<TARGET_FILE:slint_cpp-shared> DESTINATION .)
+        # Ship the MSVC runtime app-locally so the app runs without the
+        # Visual C++ Redistributable installed.
+        set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+        set(CMAKE_INSTALL_UCRT_LIBRARIES OFF)
+        include(InstallRequiredSystemLibraries)
         # Slint.dll must also sit next to the executable in the build tree.
         add_custom_command(TARGET MotionVRBridge POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
