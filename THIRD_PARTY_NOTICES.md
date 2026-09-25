@@ -29,7 +29,8 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 ## OpenVR SDK
 
-The SteamVR driver is built against `openvr_driver.h`. <https://github.com/ValveSoftware/openvr>
+The SteamVR driver is built against `openvr_driver.h` and includes the SDK's hand skeleton
+simulation sample (`driver/third_party/openvr_hand_simulation`). <https://github.com/ValveSoftware/openvr>
 
 ```
 Copyright (c) 2015, Valve Corporation

@@ -137,12 +137,23 @@ struct ControllerInput {
     bool pressed(Button b) const { return (buttons & b) != 0; }
 };
 
+enum class Finger : int { Thumb, Index, Middle, Ring, Pinky, Count };
+constexpr int kFingerCount = static_cast<int>(Finger::Count);
+
+// Per-finger bend for one hand.
+struct FingerPose {
+    bool valid = false;
+    std::array<float, kFingerCount> curl{};  // 0 straight .. 1 fully bent
+    std::array<float, kFingerCount> splay{}; // -1..1 sideways spread, 0 = neutral
+};
+
 // Canonical frame exchanged between sources and sinks:
 // right-handed, +Y up, -Z forward, meters (the OpenXR / SteamVR convention).
 struct TrackingFrame {
     uint64_t timestampUs = 0;
     std::array<TrackerPose, kRoleCount> poses{};
     std::array<ControllerInput, 2> controllers{}; // indexed by Hand
+    std::array<FingerPose, 2> fingers{};          // indexed by Hand
 
     TrackerPose& operator[](TrackerRole r) { return poses[static_cast<int>(r)]; }
     const TrackerPose& operator[](TrackerRole r) const { return poses[static_cast<int>(r)]; }

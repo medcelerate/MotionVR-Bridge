@@ -1,5 +1,6 @@
 #include "o3ds/O3dsDecoder.h"
 
+#include "core/Fingers.h"
 #include "core/JointNames.h"
 
 #include "o3ds_generated.h"
@@ -175,6 +176,34 @@ bool Decoder::decode(const uint8_t* data, size_t size, TrackingFrame& frame, std
         if (worldTransform(it->second, b.node, cache, state, world))
             frame.poses[r] = toCanonical(world);
     }
+
+    if (auto it = subjects_.find(fingerSubject_); it != subjects_.end()) {
+        auto& [cache, state] = caches[fingerSubject_];
+        if (cache.empty()) {
+            cache.resize(it->second.nodes.size());
+            state.assign(it->second.nodes.size(), 0);
+        }
+        auto position = [&](int node, Vec3& out) {
+            Mat4 world;
+            if (!worldTransform(it->second, node, cache, state, world))
+                return false;
+            out = toCanonical(world).position;
+            return true;
+        };
+        for (int h = 0; h < 2; ++h) {
+            Vec3 wrist;
+            if (wristJoint_[h] < 0 || !position(wristJoint_[h], wrist))
+                continue;
+            std::array<FingerChain, kFingerCount> chains;
+            for (int f = 0; f < kFingerCount; ++f)
+                for (int j : fingerJoints_[h][f]) {
+                    Vec3 p;
+                    if (position(j, p))
+                        chains[f].push_back(p);
+                }
+            frame.fingers[h] = fingerPose(wrist, chains);
+        }
+    }
     return true;
 }
 
@@ -182,6 +211,7 @@ void Decoder::rebind()
 {
     bindings_ = {};
     boundPerformer_.clear();
+    fingerSubject_.clear();
     boundCount_ = 0;
 
     // Rigid bodies are matched by subject name; a performer by joint name.
@@ -204,6 +234,11 @@ void Decoder::rebind()
     if (!performerUuid.empty())
         for (const Node& n : subjects_[performerUuid].nodes)
             jointNames.push_back(normalizeJointName(n.name));
+
+    fingerSubject_ = performerUuid;
+    fingerJoints_[0] = findFingerJoints(Hand::Left, jointNames);
+    fingerJoints_[1] = findFingerJoints(Hand::Right, jointNames);
+    wristJoint_ = {findRole(TrackerRole::LeftHand, jointNames), findRole(TrackerRole::RightHand, jointNames)};
 
     for (int r = 0; r < kRoleCount; ++r) {
         const auto role = static_cast<TrackerRole>(r);

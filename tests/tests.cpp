@@ -1,6 +1,7 @@
 // Minimal self-checking tests for the pieces that don't need SteamVR or a UI.
 
 #include "PlayspaceAlignment.h"
+#include "core/Fingers.h"
 #include "core/HandCalibration.h"
 #include "core/JointNames.h"
 #include "o3ds/O3dsDecoder.h"
@@ -327,6 +328,95 @@ void testJointNames()
           "names: Unreal skeleton");
 }
 
+// A finger along +X from a wrist at the origin, bending by the given angles
+// (degrees) at each joint, in the XY plane.
+mvr::FingerChain bentFinger(std::initializer_list<float> bends)
+{
+    mvr::FingerChain joints = {{0.08f, 0, 0}};
+    float angle = 0;
+    mvr::Vec3 p = joints[0];
+    for (float b : bends) {
+        angle += b * mvr::kDegToRad;
+        p = p + mvr::Vec3{std::cos(angle), -std::sin(angle), 0} * 0.03f;
+        joints.push_back(p);
+    }
+    return joints;
+}
+
+void testFingerCurl()
+{
+    using mvr::Finger;
+    const mvr::Vec3 wrist{0, 0, 0};
+    check(near(mvr::fingerCurl(Finger::Index, wrist, bentFinger({0, 0, 0})), 0, 1e-3f), "fingers: straight finger is 0");
+    check(near(mvr::fingerCurl(Finger::Index, wrist, bentFinger({90, 100, 80})), 1, 1e-3f), "fingers: fist is 1");
+    check(near(mvr::fingerCurl(Finger::Index, wrist, bentFinger({45, 50, 40})), 0.5f, 1e-3f), "fingers: half bent is 0.5");
+    // Only two joints known: scaled by the first bend alone.
+    check(near(mvr::fingerCurl(Finger::Index, wrist, bentFinger({45})), 0.5f, 1e-3f), "fingers: partial chain scaled");
+    check(!mvr::fingerPose(wrist, {}).valid, "fingers: no chains, not valid");
+
+    auto names = [](std::initializer_list<const char*> raw) {
+        std::vector<std::string> out;
+        for (const char* n : raw)
+            out.push_back(mvr::normalizeJointName(n));
+        return out;
+    };
+    const int index = static_cast<int>(Finger::Index), thumb = static_cast<int>(Finger::Thumb);
+    auto humanIk = mvr::findFingerJoints(mvr::Hand::Left, names({"LeftHand", "LeftHandIndex1", "LeftHandIndex2",
+                                                                  "LeftHandIndex3", "LeftHandIndex4"}));
+    check((humanIk[index] == std::vector<int>{1, 2, 3, 4}), "fingers: HumanIK names");
+    auto unreal = mvr::findFingerJoints(mvr::Hand::Right, names({"index_01_r", "index_02_r", "index_03_r", "index_01_l"}));
+    check((unreal[index] == std::vector<int>{0, 1, 2}), "fingers: Unreal names, right hand only");
+    auto xsens = mvr::findFingerJoints(mvr::Hand::Left, names({"LeftFirstMC", "LeftFirstPP", "LeftFirstDP",
+                                                                "LeftSecondPP", "LeftSecondMP", "LeftSecondDP"}));
+    check((xsens[thumb] == std::vector<int>{0, 1, 2}) && (xsens[index] == std::vector<int>{3, 4, 5}), "fingers: Xsens names");
+    auto unity = mvr::findFingerJoints(mvr::Hand::Left, names({"Left Little Proximal", "Left Little Intermediate",
+                                                                "Left Little Distal"}));
+    check((unity[static_cast<int>(Finger::Pinky)] == std::vector<int>{0, 1, 2}), "fingers: Unity names");
+}
+
+void testFingerProtocol()
+{
+    mvr::TrackingFrame in;
+    in.fingers[1].valid = true;
+    in.fingers[1].curl = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f};
+    in.fingers[1].splay[2] = -0.5f;
+    unsigned char buf[mvr::stream::kMaxPacketSize];
+    const size_t size = mvr::stream::encode(in, 1, 1, mvr::stream::kFlagFingers, buf);
+    mvr::stream::PacketHeader header;
+    mvr::TrackingFrame out;
+    check(mvr::stream::decode(buf, size, header, out) && header.fingerCount == 1, "protocol: finger entry");
+    check(!out.fingers[0].valid && out.fingers[1].valid && near(out.fingers[1].curl[4], 0.5f, 1e-6f) &&
+              near(out.fingers[1].splay[2], -0.5f, 1e-6f),
+          "protocol: finger values");
+    const size_t without = mvr::stream::encode(in, 1, 2, 0, buf);
+    check(mvr::stream::decode(buf, without, header, out) && header.fingerCount == 0 && !out.fingers[1].valid,
+          "protocol: fingers omitted without flag");
+}
+
+void testO3dsFingers()
+{
+    // Left hand at the origin pointing +X, index finger curled 45/50/40 degrees (half).
+    const float d = 3.0f; // cm per segment
+    const float a1 = 45 * mvr::kDegToRad, a2 = 95 * mvr::kDegToRad, a3 = 135 * mvr::kDegToRad;
+    auto seg = [&](float a) { return mvr::Vec3{d * std::cos(a), -d * std::sin(a), 0}; };
+    // Local translations (parent-relative, no rotations) along the bent chain.
+    const auto def = o3dsDefinition(true, "Hand", "hand-1",
+                                    {{-1, "Hips", {0, 0, 0}, {}},
+                                     {0, "LeftHand", {0, 0, 0}, {}},
+                                     {1, "LeftHandIndex1", {8, 0, 0}, {}},
+                                     {2, "LeftHandIndex2", seg(a1), {}},
+                                     {3, "LeftHandIndex3", seg(a2), {}},
+                                     {4, "LeftHandIndex4", seg(a3), {}}},
+                                    D::Direction_Right, D::Direction_Up, D::Direction_Back,
+                                    D::DistanceUnit_Centimeter);
+    mvr::o3ds::Decoder decoder({});
+    mvr::TrackingFrame frame;
+    std::string error;
+    check(decoder.decode(def.data(), def.size(), frame, error) && frame.fingers[0].valid, "o3ds: finger data");
+    check(near(frame.fingers[0].curl[static_cast<int>(mvr::Finger::Index)], 0.5f, 1e-3f), "o3ds: index curl");
+    check(!frame.fingers[1].valid, "o3ds: no right-hand fingers");
+}
+
 } // namespace
 
 int main()
@@ -340,6 +430,9 @@ int main()
     testO3dsLeftHandedRigidBody();
     testO3dsUdpReassembly();
     testJointNames();
+    testFingerCurl();
+    testFingerProtocol();
+    testO3dsFingers();
     std::printf("%d failure(s)\n", failures);
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

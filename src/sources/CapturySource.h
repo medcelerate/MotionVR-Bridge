@@ -5,6 +5,7 @@
 #include <array>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 struct RemoteCaptury;
 struct CapturyActor;
@@ -23,7 +24,10 @@ public:
     std::string status() const override;
 
 private:
-    using JointMap = std::array<int, kRoleCount>; // role -> joint index, -1 if absent
+    struct JointMap {
+        std::array<int, kRoleCount> roles; // role -> joint index, -1 if absent
+        std::array<std::array<std::vector<int>, kFingerCount>, 2> fingers; // per hand, knuckle first
+    };
 
     static void poseCallback(RemoteCaptury*, CapturyActor* actor, CapturyPose* pose, int quality, void* self);
     static void actorChangedCallback(RemoteCaptury*, int actorId, int mode, void* self);

@@ -13,13 +13,16 @@ namespace mvr {
 // without any per-game setup.
 class HandController : public vr::ITrackedDeviceServerDriver {
 public:
-    explicit HandController(Hand hand);
+    // `fullSkeleton`: fingers come from real finger tracking rather than
+    // being estimated from buttons (reported to SteamVR at activation).
+    HandController(Hand hand, bool fullSkeleton);
 
     const std::string& serial() const { return serial_; }
 
-    // Publishes a pose and input state, or disconnects the controller if
-    // `pose` is null (so real controllers can take the hand role back).
-    void update(const vr::DriverPose_t* pose, const ControllerInput& input);
+    // Publishes a pose, input state and hand skeleton, or disconnects the
+    // controller if `pose` is null (so real controllers can take the hand
+    // role back). Without finger data the skeleton follows trigger and grip.
+    void update(const vr::DriverPose_t* pose, const ControllerInput& input, const FingerPose& fingers);
 
     vr::EVRInitError Activate(uint32_t objectId) override;
     void Deactivate() override;
@@ -37,11 +40,13 @@ private:
         vr::VRInputComponentHandle_t stickClick, stickTouch, stickX, stickY;
         vr::VRInputComponentHandle_t fingerIndex, fingerMiddle, fingerRing, fingerPinky;
         vr::VRInputComponentHandle_t haptic;
+        vr::VRInputComponentHandle_t skeleton;
     };
 
-    void pushInput(const ControllerInput& in);
+    void pushInput(const ControllerInput& in, const FingerPose& fingers);
 
     Hand hand_;
+    bool fullSkeleton_;
     std::string serial_;
     uint32_t objectId_ = vr::k_unTrackedDeviceIndexInvalid;
     vr::DriverPose_t pose_{};

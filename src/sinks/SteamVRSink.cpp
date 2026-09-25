@@ -15,6 +15,8 @@ Config SteamVRSink::defaultConfig() const
          "Must match driver_motionvrbridge's port setting"},
         {"hands_as_controllers", "Publish hands as controllers", ConfigField::Kind::Bool, "false",
          "Appear as Index controllers. Only use with no real controllers connected."},
+        {"finger_tracking", "Finger tracking", ConfigField::Kind::Bool, "false",
+         "Needs hands as controllers. Drives in-game fingers from the source's finger data"},
         {"calibrate_hands", "Calibrate hands", ConfigField::Kind::Action, "",
          "Stand in a T-pose, palms down, then press"},
     };
@@ -44,6 +46,7 @@ bool SteamVRSink::start(const Config& cfg, std::string& error)
 
     target_ = host + ":" + std::to_string(port);
     handsAsControllers_ = configBool(cfg, "hands_as_controllers", false);
+    fingerTracking_ = handsAsControllers_ && configBool(cfg, "finger_tracking", false);
     // A new session tells the driver to redo its playspace alignment.
     session_ = std::random_device{}();
     sequence_ = 0;
@@ -54,6 +57,7 @@ bool SteamVRSink::start(const Config& cfg, std::string& error)
     packetRate_.reset();
     sendErrors_ = 0;
     handStatus_ = handsAsControllers_ ? "Hands: uncalibrated (using forearm direction)" : "";
+    fingerStatus_.clear();
     return true;
 }
 
@@ -82,6 +86,8 @@ void SteamVRSink::send(const TrackingFrame& frame, const RoleSet& forward)
         out[TrackerRole::LeftHand] = hands_.controllerPose(frame, Hand::Left);
         out[TrackerRole::RightHand] = hands_.controllerPose(frame, Hand::Right);
     }
+    if (fingerTracking_)
+        flags |= stream::kFlagFingers;
     for (int r = 0; r < kRoleCount; ++r)
         if (!forward.test(r))
             out.poses[r].valid = false;
@@ -92,6 +98,11 @@ void SteamVRSink::send(const TrackingFrame& frame, const RoleSet& forward)
 
     std::lock_guard lock(statsMutex_);
     ok ? packetRate_.add() : void(++sendErrors_);
+    if (fingerTracking_) {
+        const bool l = frame.fingers[0].valid, r = frame.fingers[1].valid;
+        fingerStatus_ = l || r ? std::string("Fingers: ") + (l ? "left " : "") + (r ? "right" : "")
+                               : "Fingers: source has no finger data";
+    }
 }
 
 std::string SteamVRSink::status() const
@@ -104,6 +115,8 @@ std::string SteamVRSink::status() const
         s += " · " + std::to_string(sendErrors_) + " send errors";
     if (!handStatus_.empty())
         s += "\n" + handStatus_;
+    if (!fingerStatus_.empty())
+        s += "\n" + fingerStatus_;
     return s;
 }
 

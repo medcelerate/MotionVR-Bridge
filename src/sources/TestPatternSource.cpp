@@ -92,6 +92,13 @@ void TestPatternSource::run(FrameHandler onFrame, int rateHz, float speed, float
              })
             frame[role] = pose;
 
+        // Fingers: a rolling wave on the left hand, open/close on the right.
+        for (int f = 0; f < kFingerCount; ++f) {
+            frame.fingers[0].curl[f] = 0.5f + 0.5f * std::sin(t * 3.0f + f * 0.7f);
+            frame.fingers[1].curl[f] = 0.5f + 0.5f * std::sin(t * 2.0f);
+        }
+        frame.fingers[0].valid = frame.fingers[1].valid = true;
+
         onFrame(frame);
 
         next += period;

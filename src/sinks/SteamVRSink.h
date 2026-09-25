@@ -28,6 +28,7 @@ private:
     uint32_t session_ = 0;
     uint32_t sequence_ = 0;
     bool handsAsControllers_ = false;
+    bool fingerTracking_ = false;
 
     HandCalibration hands_; // only touched on the send() thread
     std::atomic<bool> calibrateRequested_{false};
@@ -36,6 +37,7 @@ private:
     RateCounter packetRate_;
     int sendErrors_ = 0;
     std::string handStatus_;
+    std::string fingerStatus_;
 };
 
 } // namespace mvr

@@ -78,6 +78,10 @@ private:
     std::array<Binding, kRoleCount> bindings_{};
     std::string boundPerformer_;
     int boundCount_ = 0;
+    // Performer finger joints per hand (knuckle first) and the wrist joint.
+    std::string fingerSubject_;
+    std::array<std::array<std::vector<int>, kFingerCount>, 2> fingerJoints_{};
+    std::array<int, 2> wristJoint_{-1, -1};
 
     // Sender space -> canonical space.
     std::array<Vec3, 3> axes_{}; // canonical direction of the sender's X, Y, Z

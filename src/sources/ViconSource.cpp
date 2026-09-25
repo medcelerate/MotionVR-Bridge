@@ -1,5 +1,6 @@
 #include "sources/ViconSource.h"
 
+#include "core/Fingers.h"
 #include "core/JointNames.h"
 
 #include "DataStreamClient.h"
@@ -25,7 +26,10 @@ struct Binding {
     std::string segment;
 };
 
-using Bindings = std::array<std::optional<Binding>, kRoleCount>;
+struct Bindings {
+    std::array<std::optional<Binding>, kRoleCount> roles;
+    std::array<std::array<std::vector<Binding>, kFingerCount>, 2> fingers; // per hand, knuckle first
+};
 
 } // namespace
 
@@ -89,6 +93,22 @@ Bindings ViconSource::Worker::bind(vds::Client& client, std::string& summary) co
 
     Bindings bindings;
     int bound = 0;
+
+    // Finger segments come from the skeleton.
+    std::vector<std::string> skeletonNames;
+    std::vector<Binding> skeletonSegments;
+    for (const Candidate& c : candidates)
+        if (c.skeleton) {
+            skeletonNames.push_back(c.label);
+            skeletonSegments.push_back(c.binding);
+        }
+    for (Hand hand : {Hand::Left, Hand::Right}) {
+        const auto chains = findFingerJoints(hand, skeletonNames);
+        for (int f = 0; f < kFingerCount; ++f)
+            for (int i : chains[f])
+                bindings.fingers[static_cast<int>(hand)][f].push_back(skeletonSegments[i]);
+    }
+
     for (int r = 0; r < kRoleCount; ++r) {
         for (const std::string& alias : roleAliases(static_cast<TrackerRole>(r))) {
             // Named rigid bodies win over skeleton segments with the same name.
@@ -98,7 +118,7 @@ Bindings ViconSource::Worker::bind(vds::Client& client, std::string& summary) co
                 best = std::find_if(candidates.begin(), candidates.end(),
                                     [&](const Candidate& c) { return c.label == alias; });
             if (best != candidates.end()) {
-                bindings[r] = best->binding;
+                bindings.roles[r] = best->binding;
                 ++bound;
                 break;
             }
@@ -156,10 +176,17 @@ void ViconSource::Worker::run()
         const double rate = client.GetFrameRate().FrameRateHz;
         if (rate > 0)
             frame.timestampUs = static_cast<uint64_t>(client.GetFrameNumber().FrameNumber * 1e6 / rate);
+        auto position = [&](const Binding& b, Vec3& out) {
+            const auto t = client.GetSegmentGlobalTranslation(b.subject, b.segment);
+            if (t.Result != vds::Result::Success || t.Occluded)
+                return false;
+            out = Vec3{float(t.Translation[0]), float(t.Translation[1]), float(t.Translation[2])} * scale;
+            return true;
+        };
         for (int r = 0; r < kRoleCount; ++r) {
-            if (!bindings[r])
+            if (!bindings.roles[r])
                 continue;
-            const Binding& b = *bindings[r];
+            const Binding& b = *bindings.roles[r];
             const auto t = client.GetSegmentGlobalTranslation(b.subject, b.segment);
             const auto q = client.GetSegmentGlobalRotationQuaternion(b.subject, b.segment);
             if (t.Result != vds::Result::Success || q.Result != vds::Result::Success || t.Occluded || q.Occluded)
@@ -168,6 +195,21 @@ void ViconSource::Worker::run()
             p.valid = true;
             p.position = Vec3{float(t.Translation[0]), float(t.Translation[1]), float(t.Translation[2])} * scale;
             p.orientation = {float(q.Rotation[0]), float(q.Rotation[1]), float(q.Rotation[2]), float(q.Rotation[3])};
+        }
+        for (Hand hand : {Hand::Left, Hand::Right}) {
+            const int h = static_cast<int>(hand);
+            const TrackerPose& wrist = frame[hand == Hand::Left ? TrackerRole::LeftHand : TrackerRole::RightHand];
+            if (!wrist.valid)
+                continue;
+            std::array<FingerChain, kFingerCount> chains;
+            for (int f = 0; f < kFingerCount; ++f)
+                for (const Binding& b : bindings.fingers[h][f]) {
+                    Vec3 p;
+                    if (!position(b, p))
+                        break;
+                    chains[f].push_back(p);
+                }
+            frame.fingers[h] = fingerPose(wrist.position, chains);
         }
         if (running)
             onFrame(frame);

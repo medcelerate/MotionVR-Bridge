@@ -1,5 +1,8 @@
 #include "sources/CapturySource.h"
 
+#include "core/Fingers.h"
+#include "core/JointNames.h"
+
 #include "RemoteCaptury.h"
 
 #include <algorithm>
@@ -195,15 +198,31 @@ void CapturySource::handlePose(const CapturyActor& actor, const CapturyPose& pos
 
     TrackingFrame frame;
     frame.timestampUs = pose.timestamp;
+    auto position = [&](int j) {
+        const CapturyTransform& t = pose.transforms[j];
+        return Vec3{t.translation[0], t.translation[1], t.translation[2]} * scale_;
+    };
     for (int r = 0; r < kRoleCount; ++r) {
-        const int j = map[r];
+        const int j = map.roles[r];
         if (j < 0 || j >= pose.numTransforms)
             continue;
         const CapturyTransform& t = pose.transforms[j];
         TrackerPose& out = frame.poses[r];
         out.valid = true;
-        out.position = Vec3{t.translation[0], t.translation[1], t.translation[2]} * scale_;
+        out.position = position(j);
         out.orientation = eulerToQuat(t.rotation);
+    }
+    for (Hand hand : {Hand::Left, Hand::Right}) {
+        const int h = static_cast<int>(hand);
+        const int wrist = map.roles[static_cast<int>(hand == Hand::Left ? TrackerRole::LeftHand : TrackerRole::RightHand)];
+        if (wrist < 0 || wrist >= pose.numTransforms)
+            continue;
+        std::array<FingerChain, kFingerCount> chains;
+        for (int f = 0; f < kFingerCount; ++f)
+            for (int j : map.fingers[h][f])
+                if (j < pose.numTransforms)
+                    chains[f].push_back(position(j));
+        frame.fingers[h] = fingerPose(position(wrist), chains);
     }
     onFrame_(frame);
 }
@@ -211,8 +230,8 @@ void CapturySource::handlePose(const CapturyActor& actor, const CapturyPose& pos
 CapturySource::JointMap CapturySource::buildJointMap(const CapturyActor& actor)
 {
     JointMap map;
-    map.fill(-1);
-    auto set = [&](TrackerRole role, int joint) { map[static_cast<int>(role)] = joint; };
+    map.roles.fill(-1);
+    auto set = [&](TrackerRole role, int joint) { map.roles[static_cast<int>(role)] = joint; };
 
     // Prefer the functional bone types; older servers leave them unset, so
     // check they look sane before trusting them.
@@ -236,7 +255,7 @@ CapturySource::JointMap CapturySource::buildJointMap(const CapturyActor& actor)
         // Chest: the upper-most spine joint, i.e. the neck's parent.
         int chest = findJointByBone(actor, CAPTURY_SPINE);
         int neck = findJointByBone(actor, CAPTURY_NECK);
-        if (neck >= 0 && actor.joints[neck].parent >= 0 && actor.joints[neck].parent != map[int(TrackerRole::Hip)])
+        if (neck >= 0 && actor.joints[neck].parent >= 0 && actor.joints[neck].parent != map.roles[int(TrackerRole::Hip)])
             chest = actor.joints[neck].parent;
         set(TrackerRole::Chest, chest);
     } else {
@@ -251,6 +270,37 @@ CapturySource::JointMap CapturySource::buildJointMap(const CapturyActor& actor)
         set(TrackerRole::RightKnee, findJointByName(actor, {"RightLeg", "RightKnee"}));
         set(TrackerRole::LeftFoot, findJointByName(actor, {"LeftFoot", "LeftAnkle"}));
         set(TrackerRole::RightFoot, findJointByName(actor, {"RightFoot", "RightAnkle"}));
+    }
+
+    // Finger chains, knuckle first.
+    if (useBoneTypes) {
+        using B = CapturyBoneType;
+        const std::vector<B> bones[2][kFingerCount] = {
+            {{CAPTURY_LEFT_THUMB_PROXIMAL, CAPTURY_LEFT_THUMB_DISTAL, CAPTURY_LEFT_THUMB_END},
+             {CAPTURY_LEFT_INDEX_PROXIMAL, CAPTURY_LEFT_INDEX_MEDIAL, CAPTURY_LEFT_INDEX_DISTAL, CAPTURY_LEFT_INDEX_END},
+             {CAPTURY_LEFT_MIDDLE_PROXIMAL, CAPTURY_LEFT_MIDDLE_MEDIAL, CAPTURY_LEFT_MIDDLE_DISTAL, CAPTURY_LEFT_MIDDLE_END},
+             {CAPTURY_LEFT_RING_PROXIMAL, CAPTURY_LEFT_RING_MEDIAL, CAPTURY_LEFT_RING_DISTAL, CAPTURY_LEFT_RING_END},
+             {CAPTURY_LEFT_PINKY_PROXIMAL, CAPTURY_LEFT_PINKY_MEDIAL, CAPTURY_LEFT_PINKY_DISTAL, CAPTURY_LEFT_PINKY_END}},
+            {{CAPTURY_RIGHT_THUMB_PROXIMAL, CAPTURY_RIGHT_THUMB_DISTAL, CAPTURY_RIGHT_THUMB_END},
+             {CAPTURY_RIGHT_INDEX_PROXIMAL, CAPTURY_RIGHT_INDEX_MEDIAL, CAPTURY_RIGHT_INDEX_DISTAL, CAPTURY_RIGHT_INDEX_END},
+             {CAPTURY_RIGHT_MIDDLE_PROXIMAL, CAPTURY_RIGHT_MIDDLE_MEDIAL, CAPTURY_RIGHT_MIDDLE_DISTAL, CAPTURY_RIGHT_MIDDLE_END},
+             {CAPTURY_RIGHT_RING_PROXIMAL, CAPTURY_RIGHT_RING_MEDIAL, CAPTURY_RIGHT_RING_DISTAL, CAPTURY_RIGHT_RING_END},
+             {CAPTURY_RIGHT_PINKY_PROXIMAL, CAPTURY_RIGHT_PINKY_MEDIAL, CAPTURY_RIGHT_PINKY_DISTAL, CAPTURY_RIGHT_PINKY_END}},
+        };
+        for (int h = 0; h < 2; ++h)
+            for (int f = 0; f < kFingerCount; ++f)
+                for (B b : bones[h][f]) {
+                    const int j = findJointByBone(actor, b);
+                    if (j < 0)
+                        break; // joints must be consecutive from the knuckle
+                    map.fingers[h][f].push_back(j);
+                }
+    } else {
+        std::vector<std::string> names;
+        for (int j = 0; j < actor.numJoints; ++j)
+            names.push_back(normalizeJointName(actor.joints[j].name));
+        map.fingers[0] = findFingerJoints(Hand::Left, names);
+        map.fingers[1] = findFingerJoints(Hand::Right, names);
     }
     return map;
 }

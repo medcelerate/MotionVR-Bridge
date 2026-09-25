@@ -12,6 +12,7 @@ find_package(Threads REQUIRED)
 
 # --- Shared code (app + driver) ----------------------------------------------
 add_library(mvr_common STATIC
+    src/core/Fingers.cpp
     src/core/HandCalibration.cpp
     src/core/JointNames.cpp
     src/net/UdpSocket.cpp
@@ -261,8 +262,10 @@ if (MVR_BUILD_DRIVER)
         driver/src/DriverMain.cpp
         driver/src/HandController.cpp
         driver/src/TrackerDevice.cpp
+        driver/third_party/openvr_hand_simulation/hand_simulation.cpp
     )
-    target_include_directories(driver_motionvrbridge PRIVATE ${OPENVR_INCLUDE_DIR})
+    target_include_directories(driver_motionvrbridge PRIVATE ${OPENVR_INCLUDE_DIR}
+        driver/third_party/openvr_hand_simulation)
     target_link_libraries(driver_motionvrbridge PRIVATE mvr_driver_core)
     set_target_properties(driver_motionvrbridge PROPERTIES
         PREFIX ""

@@ -96,6 +96,18 @@ Stand in a T-pose with palms down and press **Calibrate hands** so wrist rotatio
 exactly. Buttons, trigger and grip are wired through the protocol but nothing drives them yet;
 gesture mapping is planned.
 
+### Finger tracking
+
+With hands as controllers on, turn on **Finger tracking** to drive the controllers' hand skeletons
+(SteamVR skeletal input, which VRChat and most games use for fingers) from the source's finger
+data. The app measures how far each finger bends from its joint positions, so it works with any
+naming: Captury finger bones, HumanIK/Mixamo (`LeftHandIndex1`…), Unreal (`index_01_l`…), Unity
+(`Left Index Proximal`…) and Xsens (`LeftSecondPP`…). The target's status shows which hands have
+finger data. Without finger data, the hand skeletons follow trigger and grip.
+
+SteamVR keeps the controllers it first created until it restarts, so restart SteamVR after changing
+this option.
+
 ## Architecture
 
 - `src/core/Tracking.h`: the canonical `TrackingFrame` (right-handed, +Y up, −Z forward, meters).

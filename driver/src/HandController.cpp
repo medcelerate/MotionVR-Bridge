@@ -1,10 +1,13 @@
 #include "HandController.h"
 
+#include "hand_simulation.h"
+
+#include <algorithm>
 #include <cmath>
 
 namespace mvr {
 
-HandController::HandController(Hand hand) : hand_(hand)
+HandController::HandController(Hand hand, bool fullSkeleton) : hand_(hand), fullSkeleton_(fullSkeleton)
 {
     serial_ = hand == Hand::Left ? "MVR-LeftHand" : "MVR-RightHand";
     pose_.qWorldFromDriverRotation.w = 1;
@@ -65,6 +68,10 @@ vr::EVRInitError HandController::Activate(uint32_t objectId)
     scalar("/input/finger/ring", inputs_.fingerRing, oneSided);
     scalar("/input/finger/pinky", inputs_.fingerPinky, oneSided);
     input->CreateHapticComponent(c, "/output/haptic", &inputs_.haptic);
+    input->CreateSkeletonComponent(c, left ? "/input/skeleton/left" : "/input/skeleton/right",
+                                   left ? "/skeleton/hand/left" : "/skeleton/hand/right", "/pose/raw",
+                                   fullSkeleton_ ? vr::VRSkeletalTracking_Full : vr::VRSkeletalTracking_Estimated,
+                                   nullptr, 0, &inputs_.skeleton);
 
     return vr::VRInitError_None;
 }
@@ -80,7 +87,7 @@ void HandController::DebugRequest(const char*, char* response, uint32_t size)
         response[0] = '\0';
 }
 
-void HandController::update(const vr::DriverPose_t* pose, const ControllerInput& input)
+void HandController::update(const vr::DriverPose_t* pose, const ControllerInput& input, const FingerPose& fingers)
 {
     if (pose) {
         pose_ = *pose;
@@ -92,10 +99,10 @@ void HandController::update(const vr::DriverPose_t* pose, const ControllerInput&
     if (objectId_ == vr::k_unTrackedDeviceIndexInvalid)
         return;
     vr::VRServerDriverHost()->TrackedDevicePoseUpdated(objectId_, pose_, sizeof(pose_));
-    pushInput(pose ? input : ControllerInput{});
+    pushInput(pose ? input : ControllerInput{}, pose ? fingers : FingerPose{});
 }
 
-void HandController::pushInput(const ControllerInput& in)
+void HandController::pushInput(const ControllerInput& in, const FingerPose& fingers)
 {
     auto* input = vr::VRDriverInput();
     auto setBool = [&](vr::VRInputComponentHandle_t h, bool v) { input->UpdateBooleanComponent(h, v, 0); };
@@ -128,12 +135,29 @@ void HandController::pushInput(const ControllerInput& in)
     setScalar(inputs_.stickX, in.thumbstickX);
     setScalar(inputs_.stickY, in.thumbstickY);
 
-    // Index reports per-finger curl; approximate it from trigger and grip so
-    // the in-game hand closes naturally.
-    setScalar(inputs_.fingerIndex, trigger);
-    setScalar(inputs_.fingerMiddle, grip);
-    setScalar(inputs_.fingerRing, grip);
-    setScalar(inputs_.fingerPinky, grip);
+    // Per-finger curl: tracked when available, otherwise approximated from
+    // trigger and grip so the in-game hand still opens and closes.
+    MyFingerCurls curls{};
+    MyFingerSplays splays{};
+    if (fingers.valid) {
+        const auto& c = fingers.curl;
+        const auto& sp = fingers.splay;
+        curls = {c[0], c[1], c[2], c[3], c[4]};
+        splays = {sp[0], sp[1], sp[2], sp[3], sp[4]};
+    } else {
+        curls = {std::max(trigger, grip), trigger, grip, grip, grip};
+    }
+    setScalar(inputs_.fingerIndex, curls.index);
+    setScalar(inputs_.fingerMiddle, curls.middle);
+    setScalar(inputs_.fingerRing, curls.ring);
+    setScalar(inputs_.fingerPinky, curls.pinky);
+
+    vr::VRBoneTransform_t bones[eBone_Count];
+    MyHandSimulation().ComputeSkeletonTransforms(
+        hand_ == Hand::Left ? vr::TrackedControllerRole_LeftHand : vr::TrackedControllerRole_RightHand, curls, splays,
+        bones);
+    input->UpdateSkeletonComponent(inputs_.skeleton, vr::VRSkeletalMotionRange_WithController, bones, eBone_Count);
+    input->UpdateSkeletonComponent(inputs_.skeleton, vr::VRSkeletalMotionRange_WithoutController, bones, eBone_Count);
 }
 
 } // namespace mvr

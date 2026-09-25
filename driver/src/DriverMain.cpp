@@ -143,9 +143,10 @@ public:
             const TrackerPose& p = latest.frame[hand == Hand::Left ? TrackerRole::LeftHand : TrackerRole::RightHand];
             if (handsWanted && p.valid) {
                 vr::DriverPose_t pose = makePose(p);
-                controller(hand).update(&pose, latest.frame.controllers[h]);
+                controller(hand, latest.flags & stream::kFlagFingers).update(&pose, latest.frame.controllers[h],
+                                                                             latest.frame.fingers[h]);
             } else if (controllers_[h]) {
-                controllers_[h]->update(nullptr, {});
+                controllers_[h]->update(nullptr, {}, {});
             }
         }
     }
@@ -165,11 +166,11 @@ private:
 
     // Created on first use: SteamVR can't remove devices, so controllers only
     // exist once the app has asked for them.
-    HandController& controller(Hand hand)
+    HandController& controller(Hand hand, bool fingerTracking)
     {
         auto& slot = controllers_[static_cast<int>(hand)];
         if (!slot) {
-            slot = std::make_unique<HandController>(hand);
+            slot = std::make_unique<HandController>(hand, fingerTracking);
             vr::VRServerDriverHost()->TrackedDeviceAdded(slot->serial().c_str(), vr::TrackedDeviceClass_Controller,
                                                          slot.get());
             log("MotionVR Bridge: added controller %s", slot->serial().c_str());
