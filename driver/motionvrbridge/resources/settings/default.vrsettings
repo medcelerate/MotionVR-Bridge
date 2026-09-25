@@ -1,0 +1,8 @@
+{
+    "driver_motionvrbridge": {
+        "enable": true,
+        "listen_address": "127.0.0.1",
+        "port": 39570,
+        "align_to_hmd": true
+    }
+}

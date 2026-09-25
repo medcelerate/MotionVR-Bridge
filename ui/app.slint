@@ -1,0 +1,388 @@
+import { Button, ComboBox, LineEdit, Palette, ScrollView, Switch } from "std-widgets.slint";
+
+export struct ConfigField {
+    label: string,
+    kind: int, // 0 text, 1 number, 2 bool, 3 action button
+    value: string,
+    hint: string,
+}
+
+export struct TrackerIndicator {
+    name: string,
+    x: float,          // 0..1 across the figure
+    y: float,          // 0..1 down the figure
+    live: bool,        // source is delivering this point
+    enabled: bool,     // user wants it forwarded
+    supported: bool,   // target can use it
+    activity: float,   // 0..1 movement
+}
+
+global Theme {
+    out property <color> accent: #22d3ee;
+    out property <color> hot: #f472b6;
+    out property <color> idle: #64748b;
+    out property <color> streaming: #22c55e;
+    out property <color> panel: Palette.alternate-background;
+    out property <color> muted: Palette.foreground.transparentize(0.45);
+}
+
+component Panel inherits Rectangle {
+    in property <string> title;
+    background: Theme.panel;
+    border-radius: 12px;
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: root.title;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: Theme.muted;
+        }
+        @children
+    }
+}
+
+component ConfigPanel inherits VerticalLayout {
+    in property <[ConfigField]> fields;
+    in property <bool> editable: true;
+    callback edited(int, string);
+    callback action(int);
+    spacing: 12px;
+    alignment: start;
+
+    for f[i] in root.fields: VerticalLayout {
+        spacing: 4px;
+        if f.kind < 2: Text {
+            text: f.label;
+            font-size: 12px;
+        }
+        if f.kind < 2: LineEdit {
+            text: f.value;
+            placeholder-text: f.hint;
+            enabled: root.editable;
+            input-type: f.kind == 1 ? InputType.number : InputType.text;
+            edited(t) => {
+                root.edited(i, t);
+            }
+        }
+        if f.kind == 2: Switch {
+            text: f.label;
+            checked: f.value == "true";
+            enabled: root.editable;
+            toggled => {
+                root.edited(i, self.checked ? "true" : "false");
+            }
+        }
+        // Actions act on a running stream, so they're enabled only while
+        // settings are locked.
+        if f.kind == 3: Button {
+            text: f.label;
+            enabled: !root.editable;
+            clicked => {
+                root.action(i);
+            }
+        }
+        if f.hint != "": Text {
+            text: f.hint;
+            font-size: 11px;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component StatusText inherits Text {
+    font-size: 12px;
+    color: Theme.muted;
+    wrap: word-wrap;
+}
+
+component Indicator inherits Rectangle {
+    in property <TrackerIndicator> data;
+    callback clicked();
+
+    property <bool> active: data.supported && data.enabled;
+    property <length> dot: 16px + data.activity * 10px;
+
+    width: 36px;
+    height: 36px;
+
+    // glow
+    Rectangle {
+        width: root.dot + 18px * data.activity;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: Theme.hot;
+        opacity: root.active && data.live ? 0.45 * data.activity : 0;
+    }
+
+    Rectangle {
+        width: root.dot;
+        height: self.width;
+        border-radius: self.width / 2;
+        border-width: 2px;
+        border-color: !root.active ? Theme.idle : data.live ? Theme.accent.mix(Theme.hot, 1 - data.activity) : Theme.idle;
+        background: !root.active ? transparent : data.live ? self.border-color.transparentize(0.25) : Theme.idle.transparentize(0.6);
+        opacity: data.supported ? 1 : 0.35;
+        animate width { duration: 90ms; }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: data.supported ? pointer : default;
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    if ta.has-hover: Rectangle {
+        y: -26px;
+        width: label.preferred-width + 14px;
+        height: 22px;
+        border-radius: 5px;
+        background: #000000d0;
+        label := Text {
+            text: data.name + (!data.supported ? " · not used by target" : !data.enabled ? " · off" : "");
+            color: white;
+            font-size: 11px;
+        }
+    }
+}
+
+component BodyView inherits Rectangle {
+    in property <[TrackerIndicator]> trackers;
+    callback tracker-clicked(int);
+
+    property <length> fig-height: min(self.height - 48px, self.width * 1.6);
+
+    fig := Rectangle {
+        width: root.fig-height / 2;
+        height: root.fig-height;
+        y: 24px;
+
+        Path {
+            width: 100%;
+            height: 100%;
+            viewbox-width: 200;
+            viewbox-height: 400;
+            stroke: Palette.foreground.transparentize(0.6);
+            stroke-width: 1.5px;
+            fill: Palette.foreground.transparentize(0.94);
+            commands: "M 91 58 C 87.8 60.0 93.2 67.0 90 70 C 86.8 73.0 77.7 74.0 72 76 C 66.3 78.0 60.2 79.0 56 82 C 51.8 85.0 49.0 87.7 47 94 C 45.0 100.3 45.2 109.0 44 120 C 42.8 131.0 41.7 145.8 40 160 C 38.3 174.2 35.8 191.7 34 205 C 32.2 218.3 30.7 231.2 29 240 C 27.3 248.8 23.8 252.7 24 258 C 24.2 263.3 27.3 271.0 30 272 C 32.7 273.0 37.8 269.3 40 264 C 42.2 258.7 41.3 249.8 43 240 C 44.7 230.2 48.0 217.5 50 205 C 52.0 192.5 53.3 177.8 55 165 C 56.7 152.2 58.5 136.8 60 128 C 61.5 119.2 63.0 108.3 64 112 C 65.0 115.7 65.7 137.0 66 150 C 66.3 163.0 66.7 178.3 66 190 C 65.3 201.7 62.3 208.3 62 220 C 61.7 231.7 62.8 246.7 64 260 C 65.2 273.3 68.0 286.7 69 300 C 70.0 313.3 69.2 328.0 70 340 C 70.8 352.0 74.7 364.3 74 372 C 73.3 379.7 66.7 382.7 66 386 C 65.3 389.3 65.3 391.0 70 392 C 74.7 393.0 89.8 394.3 94 392 C 98.2 389.7 95.3 386.7 95 378 C 94.7 369.3 92.3 353.0 92 340 C 91.7 327.0 92.3 313.0 93 300 C 93.7 287.0 94.8 272.7 96 262 C 97.2 251.3 98.7 236.0 100 236 C 101.3 236.0 102.8 251.3 104 262 C 105.2 272.7 106.3 287.0 107 300 C 107.7 313.0 108.3 327.0 108 340 C 107.7 353.0 105.3 369.3 105 378 C 104.7 386.7 101.8 389.7 106 392 C 110.2 394.3 125.3 393.0 130 392 C 134.7 391.0 134.7 389.3 134 386 C 133.3 382.7 126.7 379.7 126 372 C 125.3 364.3 129.2 352.0 130 340 C 130.8 328.0 130.0 313.3 131 300 C 132.0 286.7 134.8 273.3 136 260 C 137.2 246.7 138.3 231.7 138 220 C 137.7 208.3 134.7 201.7 134 190 C 133.3 178.3 133.7 163.0 134 150 C 134.3 137.0 135.0 115.7 136 112 C 137.0 108.3 138.5 119.2 140 128 C 141.5 136.8 143.3 152.2 145 165 C 146.7 177.8 148.0 192.5 150 205 C 152.0 217.5 155.3 230.2 157 240 C 158.7 249.8 157.8 258.7 160 264 C 162.2 269.3 167.3 273.0 170 272 C 172.7 271.0 175.8 263.3 176 258 C 176.2 252.7 172.7 248.8 171 240 C 169.3 231.2 167.8 218.3 166 205 C 164.2 191.7 161.7 174.2 160 160 C 158.3 145.8 157.2 131.0 156 120 C 154.8 109.0 155.0 100.3 153 94 C 151.0 87.7 148.2 85.0 144 82 C 139.8 79.0 133.7 78.0 128 76 C 122.3 74.0 113.2 73.0 110 70 C 106.8 67.0 112.2 60.0 109 58 C 105.8 56.0 94.2 56.0 91 58 Z";
+        }
+
+        // head
+        Rectangle {
+            x: parent.width * 76 / 200;
+            y: parent.height * 10 / 400;
+            width: parent.width * 48 / 200;
+            height: self.width;
+            border-radius: self.width / 2;
+            border-width: 1.5px;
+            border-color: Palette.foreground.transparentize(0.6);
+            background: Palette.foreground.transparentize(0.94);
+        }
+
+        for t[i] in root.trackers: Indicator {
+            x: t.x * parent.width - self.width / 2;
+            y: t.y * parent.height - self.height / 2;
+            data: t;
+            clicked => {
+                root.tracker-clicked(i);
+            }
+        }
+    }
+
+    // Figure faces the viewer, so the subject's right is on the left.
+    Text {
+        x: fig.x - 28px;
+        y: fig.y + fig.height - 20px;
+        text: "R";
+        color: Theme.muted;
+        font-weight: 700;
+    }
+    Text {
+        x: fig.x + fig.width + 18px;
+        y: fig.y + fig.height - 20px;
+        text: "L";
+        color: Theme.muted;
+        font-weight: 700;
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "MotionVR Bridge";
+    preferred-width: 1040px;
+    preferred-height: 680px;
+    min-width: 860px;
+    min-height: 560px;
+    background: Palette.background;
+
+    in property <[string]> source-names;
+    in property <[string]> sink-names;
+    in-out property <int> source-index;
+    in-out property <int> sink-index;
+    in property <[ConfigField]> source-config;
+    in property <[ConfigField]> sink-config;
+    in property <[TrackerIndicator]> trackers;
+    in property <bool> running;
+    in property <float> frame-rate;
+    in property <string> source-status;
+    in property <string> sink-status;
+    in property <string> error-text;
+
+    callback source-selected(int);
+    callback sink-selected(int);
+    callback source-config-edited(int, string);
+    callback sink-config-edited(int, string);
+    callback source-action(int);
+    callback sink-action(int);
+    callback start-stop-clicked();
+    callback open-url(string);
+    callback tracker-clicked(int);
+
+    init => {
+        Palette.color-scheme = ColorScheme.dark;
+    }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 16px;
+
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "MotionVR Bridge";
+                font-size: 20px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle { }
+            Rectangle {
+                width: pill.preferred-width + 24px;
+                height: 28px;
+                border-radius: 4px;
+                background: root.running ? Theme.streaming.transparentize(0.8) : Theme.idle.transparentize(0.8);
+                pill := Text {
+                    text: root.running ? "Streaming · " + round(root.frame-rate) + " fps" : "Stopped";
+                    color: root.running ? Theme.streaming : Theme.muted;
+                    font-size: 12px;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 16px;
+            vertical-stretch: 1;
+
+            Panel {
+                title: "SOURCE";
+                width: 290px;
+                ComboBox {
+                    model: root.source-names;
+                    current-index <=> root.source-index;
+                    enabled: !root.running;
+                    selected => {
+                        root.source-selected(self.current-index);
+                    }
+                }
+                ScrollView {
+                    vertical-stretch: 1;
+                    ConfigPanel {
+                        fields: root.source-config;
+                        editable: !root.running;
+                        edited(i, v) => {
+                            root.source-config-edited(i, v);
+                        }
+                        action(i) => {
+                            root.source-action(i);
+                        }
+                    }
+                }
+                StatusText {
+                    text: root.source-status;
+                }
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 12px;
+                BodyView {
+                    vertical-stretch: 1;
+                    trackers: root.trackers;
+                    tracker-clicked(i) => {
+                        root.tracker-clicked(i);
+                    }
+                }
+                StatusText {
+                    text: "Indicators light up as the source moves each point. Click one to stop forwarding it.";
+                    horizontal-alignment: center;
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Button {
+                        width: 180px;
+                        height: 40px;
+                        text: root.running ? "Stop" : "Start";
+                        primary: !root.running;
+                        clicked => {
+                            root.start-stop-clicked();
+                        }
+                    }
+                }
+                if root.error-text != "": Text {
+                    text: root.error-text;
+                    color: #f87171;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+
+            Panel {
+                title: "TARGET";
+                width: 290px;
+                ComboBox {
+                    model: root.sink-names;
+                    current-index <=> root.sink-index;
+                    enabled: !root.running;
+                    selected => {
+                        root.sink-selected(self.current-index);
+                    }
+                }
+                ScrollView {
+                    vertical-stretch: 1;
+                    ConfigPanel {
+                        fields: root.sink-config;
+                        editable: !root.running;
+                        edited(i, v) => {
+                            root.sink-config-edited(i, v);
+                        }
+                        action(i) => {
+                            root.sink-action(i);
+                        }
+                    }
+                }
+                StatusText {
+                    text: root.sink-status;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            credit := Text {
+                text: "Designed by Virtualworx";
+                font-size: 11px;
+                color: credit-link.has-hover ? Theme.accent : Theme.muted;
+                credit-link := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.open-url("https://virtualworx.io");
+                    }
+                }
+            }
+        }
+    }
+}
