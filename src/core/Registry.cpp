@@ -5,6 +5,7 @@
 #include "sources/CapturySource.h"
 #include "sources/Open3DStreamSource.h"
 #include "sources/TestPatternSource.h"
+#include "sources/XsensSource.h"
 #ifdef MVR_HAVE_VICON
 #include "sources/ViconSource.h"
 #endif
@@ -64,6 +65,7 @@ const std::vector<SourceInfo>& availableSources()
 #ifdef MVR_HAVE_VICON
         {"Vicon DataStream", [] { return std::make_unique<ViconSource>(); }},
 #endif
+        {"Xsens MVN", [] { return std::make_unique<XsensSource>(); }},
         {"Open3DStream", [] { return std::make_unique<Open3DStreamSource>(); }},
         {"Test Pattern", [] { return std::make_unique<TestPatternSource>(); }},
     };

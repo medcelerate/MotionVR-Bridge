@@ -6,7 +6,7 @@
 
 ![MotionVR Bridge](docs/screenshot.png)
 
-MotionVR Bridge streams full-body motion capture into VR. Pick a source (Captury Live, Vicon or Open3DStream)
+MotionVR Bridge streams full-body motion capture into VR. Pick a source (Captury Live, Vicon, Xsens MVN or Open3DStream)
 and a target (VRChat's OSC trackers, or SteamVR, where your body shows up as virtual trackers
 and optionally your hands as controllers), then press Start.
 

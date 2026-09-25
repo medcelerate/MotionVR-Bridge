@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/AxisConversion.h"
 #include "core/Tracking.h"
 
 #include <array>
@@ -83,9 +84,7 @@ private:
     std::array<std::array<std::vector<int>, kFingerCount>, 2> fingerJoints_{};
     std::array<int, 2> wristJoint_{-1, -1};
 
-    // Sender space -> canonical space.
-    std::array<Vec3, 3> axes_{}; // canonical direction of the sender's X, Y, Z
-    float unitsToMeters_ = 1.0f;
+    AxisConversion conversion_; // sender space -> canonical space
 };
 
 // Reassembles Open3DStream UDP fragments: each datagram is a 16-byte

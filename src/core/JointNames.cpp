@@ -22,7 +22,7 @@ const std::vector<std::string>& roleAliases(TrackerRole role)
 {
     static const std::array<std::vector<std::string>, kRoleCount> aliases = {{
         /* Head       */ {"head", "hmd"},
-        /* Chest      */ {"spine3", "spine2", "chest", "upperchest", "thorax", "spine05", "spine04", "spine03", "spine1"},
+        /* Chest      */ {"spine3", "spine2", "chest", "upperchest", "thorax", "spine05", "spine04", "spine03", "t8", "spine1"},
         /* Hip        */ {"hips", "pelvis", "hip", "waist"},
         /* LeftElbow  */ {"leftforearm", "leftelbow", "leftlowerarm", "lowerarml", "lradius", "lelbow"},
         /* RightElbow */ {"rightforearm", "rightelbow", "rightlowerarm", "lowerarmr", "rradius", "relbow"},

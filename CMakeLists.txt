@@ -23,7 +23,7 @@ if (WIN32)
     target_link_libraries(mvr_common PUBLIC ws2_32)
 endif()
 
-# --- Open3DStream decoding (app + tests) --------------------------------------
+# --- Stream decoders: Open3DStream, Xsens MVN (app + tests) ------------------
 if (MVR_BUILD_APP OR MVR_BUILD_TESTS)
     include(FetchContent)
     # FlatBuffers: headers plus the flatc compiler, to generate the reader
@@ -47,10 +47,10 @@ if (MVR_BUILD_APP OR MVR_BUILD_TESTS)
         DEPENDS flatc ${O3DS_SCHEMA}
         COMMENT "Generating Open3DStream reader")
 
-    add_library(mvr_o3ds STATIC src/o3ds/O3dsDecoder.cpp ${O3DS_GENERATED_DIR}/o3ds_generated.h)
-    target_include_directories(mvr_o3ds PUBLIC src PRIVATE ${O3DS_GENERATED_DIR}
+    add_library(mvr_decoders STATIC src/o3ds/O3dsDecoder.cpp src/xsens/MvnDecoder.cpp ${O3DS_GENERATED_DIR}/o3ds_generated.h)
+    target_include_directories(mvr_decoders PUBLIC src PRIVATE ${O3DS_GENERATED_DIR}
         ${flatbuffers_SOURCE_DIR}/include)
-    target_link_libraries(mvr_o3ds PUBLIC mvr_common)
+    target_link_libraries(mvr_decoders PUBLIC mvr_common)
 endif()
 
 # --- App ---------------------------------------------------------------------
@@ -120,8 +120,8 @@ if (MVR_BUILD_APP)
     FetchContent_MakeAvailable(nng)
     unset(BUILD_SHARED_LIBS)
 
-    target_sources(MotionVRBridge PRIVATE src/sources/Open3DStreamSource.cpp)
-    target_link_libraries(MotionVRBridge PRIVATE mvr_common mvr_o3ds nng Slint::Slint RemoteCaptury Threads::Threads)
+    target_sources(MotionVRBridge PRIVATE src/sources/Open3DStreamSource.cpp src/sources/XsensSource.cpp)
+    target_link_libraries(MotionVRBridge PRIVATE mvr_common mvr_decoders nng Slint::Slint RemoteCaptury Threads::Threads)
     slint_target_sources(MotionVRBridge ui/app.slint NAMESPACE ui)
     # App icon (regenerate with packaging/icon/make_icon.py).
     if (APPLE)
@@ -310,6 +310,6 @@ if (MVR_BUILD_TESTS)
     enable_testing()
     add_executable(mvr_tests tests/tests.cpp)
     target_include_directories(mvr_tests PRIVATE ${O3DS_GENERATED_DIR} ${flatbuffers_SOURCE_DIR}/include)
-    target_link_libraries(mvr_tests PRIVATE mvr_driver_core mvr_o3ds)
+    target_link_libraries(mvr_tests PRIVATE mvr_driver_core mvr_decoders)
     add_test(NAME mvr_tests COMMAND mvr_tests)
 endif()

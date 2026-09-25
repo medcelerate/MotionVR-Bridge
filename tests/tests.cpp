@@ -5,12 +5,14 @@
 #include "core/HandCalibration.h"
 #include "core/JointNames.h"
 #include "o3ds/O3dsDecoder.h"
+#include "xsens/MvnDecoder.h"
 #include "o3ds_generated.h"
 #include "StreamReceiver.h"
 #include "net/UdpSocket.h"
 #include "protocol/TrackerStream.h"
 
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <random>
 #include <thread>
@@ -417,6 +419,85 @@ void testO3dsFingers()
     check(!frame.fingers[1].valid, "o3ds: no right-hand fingers");
 }
 
+// One MVN "02" datagram: segments are {id, position (MVN frame, meters), rotation}.
+struct MvnSegment {
+    uint32_t id;
+    mvr::Vec3 p;
+    mvr::Quat q;
+};
+
+std::vector<uint8_t> mvnDatagram(uint32_t sample, bool last, const std::vector<MvnSegment>& segments,
+                                 uint8_t fingers = 0, const char* type = "02")
+{
+    std::vector<uint8_t> d;
+    auto u8 = [&](uint32_t v) { d.push_back(static_cast<uint8_t>(v)); };
+    auto u16 = [&](uint32_t v) { u8(v >> 8); u8(v); };
+    auto u32 = [&](uint32_t v) { u8(v >> 24); u8(v >> 16); u8(v >> 8); u8(v); };
+    auto f32 = [&](float f) { uint32_t b; std::memcpy(&b, &f, 4); u32(b); };
+    d.insert(d.end(), {'M', 'X', 'T', 'P', uint8_t(type[0]), uint8_t(type[1])});
+    u32(sample);
+    u8(last ? 0x80 : 0x00);
+    u8(static_cast<uint32_t>(segments.size()));
+    u32(sample * 10); // timecode (ms)
+    u8(0);            // character
+    u8(23);           // body segments
+    u8(0);            // props
+    u8(fingers);
+    u16(0);
+    u16(static_cast<uint32_t>(segments.size() * 32));
+    for (const MvnSegment& s : segments) {
+        u32(s.id);
+        f32(s.p.x); f32(s.p.y); f32(s.p.z);
+        f32(s.q.w); f32(s.q.x); f32(s.q.y); f32(s.q.z);
+    }
+    return d;
+}
+
+void testXsensMvn()
+{
+    using mvr::TrackerRole;
+    mvr::xsens::MvnDecoder decoder;
+    mvr::TrackingFrame frame;
+    std::string error;
+
+    // Pelvis 1 m up and 0.5 m forward, turned 90 degrees to the left (about +Z up).
+    const mvr::Quat turnLeft = mvr::Quat::fromAxisAngle({0, 0, 1}, 90 * mvr::kDegToRad);
+    const auto first = mvnDatagram(5, false, {{1, {0.5f, 0, 1}, turnLeft}});
+    const auto second = mvnDatagram(5, true, {{22, {0, 0.1f, 0.08f}, {}}}); // LeftFoot, 0.1 m to the left
+    check(!decoder.add(first.data(), first.size(), frame, error), "xsens: waits for last datagram");
+    check(decoder.add(second.data(), second.size(), frame, error), "xsens: completes sample");
+    const mvr::TrackerPose& hip = frame[TrackerRole::Hip];
+    // MVN forward/left/up -> canonical -Z / -X / +Y.
+    check(hip.valid && nearVec(hip.position, {0, 1, -0.5f}), "xsens: pelvis position converted");
+    check(nearVec(hip.orientation.rotate({0, 0, -1}), {-1, 0, 0}), "xsens: turning left faces canonical left");
+    check(nearVec(frame[TrackerRole::LeftFoot].position, {-0.1f, 0.08f, 0}), "xsens: foot from second datagram");
+    check(frame.timestampUs == 50000, "xsens: timestamp from timecode");
+
+    // Gloves: left index finger (SecondPP/MP/DP) bent 45/50 degrees in MVN's forward-down plane.
+    const uint32_t fingerBase = 24; // 23 body segments, 0 props
+    auto at = [](float fwd, float down) { return mvr::Vec3{fwd, 0.3f, 1.0f - down}; };
+    const float d = 0.03f, a1 = 45 * mvr::kDegToRad, a2 = 95 * mvr::kDegToRad;
+    const mvr::Vec3 knuckle = at(0.08f, 0);
+    const mvr::Vec3 pip = knuckle + mvr::Vec3{d * std::cos(a1), 0, -d * std::sin(a1)};
+    const mvr::Vec3 dip = pip + mvr::Vec3{d * std::cos(a2), 0, -d * std::sin(a2)};
+    const auto gloves = mvnDatagram(6, true,
+                                    {{15, at(0, 0), {}}, // LeftHand (wrist)
+                                     {fingerBase + 5, knuckle, {}}, {fingerBase + 6, pip, {}}, {fingerBase + 7, dip, {}}},
+                                    40);
+    check(decoder.add(gloves.data(), gloves.size(), frame, error) && frame.fingers[0].valid, "xsens: finger data");
+    // Two joints measured (knuckle and middle): 45 + 50 of a possible 90 + 100 degrees.
+    check(near(frame.fingers[0].curl[static_cast<int>(mvr::Finger::Index)], 95.0f / 190.0f, 1e-3f), "xsens: index curl");
+    check(mvr::xsens::segmentName(fingerBase + 5, 23, 0) == "LeftSecondPP" &&
+              mvr::xsens::segmentName(fingerBase + 20, 23, 0) == "RightCarpus",
+          "xsens: finger segment names");
+
+    const auto euler = mvnDatagram(7, true, {}, 0, "01");
+    check(!decoder.add(euler.data(), euler.size(), frame, error) && !error.empty(), "xsens: explains wrong pose type");
+    const uint8_t junk[] = {'X', 'X', 'X', 'X', '0', '2', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    error.clear();
+    check(!decoder.add(junk, sizeof(junk), frame, error) && error.empty(), "xsens: ignores non-MVN packets");
+}
+
 } // namespace
 
 int main()
@@ -433,6 +514,7 @@ int main()
     testFingerCurl();
     testFingerProtocol();
     testO3dsFingers();
+    testXsensMvn();
     std::printf("%d failure(s)\n", failures);
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

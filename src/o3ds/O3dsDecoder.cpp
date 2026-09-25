@@ -63,11 +63,9 @@ Decoder::Mat4 Decoder::Mat4::operator*(const Mat4& o) const
 
 Decoder::Decoder(Options options) : options_(std::move(options))
 {
-    unitsToMeters_ = options_.fallbackUnitsToMeters;
-    if (options_.fallbackAxes == FallbackAxes::YUp)
-        axes_ = {Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1}};
-    else
-        axes_ = {Vec3{0, 0, -1}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}; // forward, right, up
+    conversion_.unitsToMeters = options_.fallbackUnitsToMeters;
+    if (options_.fallbackAxes == FallbackAxes::ZUp)
+        conversion_.axes = {Vec3{0, 0, -1}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}; // forward, right, up
 }
 
 bool Decoder::decode(const uint8_t* data, size_t size, TrackingFrame& frame, std::string& error)
@@ -83,9 +81,9 @@ bool Decoder::decode(const uint8_t* data, size_t size, TrackingFrame& frame, std
     std::array<Vec3, 3> axes;
     if (directionVector(list->x_axis(), axes[0]) && directionVector(list->y_axis(), axes[1]) &&
         directionVector(list->z_axis(), axes[2]))
-        axes_ = axes;
+        conversion_.axes = axes;
     if (float m = metersPer(list->distance_unit()); m > 0)
-        unitsToMeters_ = m;
+        conversion_.unitsToMeters = m;
 
     bool structureChanged = false;
     auto define = [&](const D::SubjectData* sd, bool performer) {
@@ -301,28 +299,11 @@ bool Decoder::worldTransform(const Subject& subject, int index, std::vector<Mat4
 
 TrackerPose Decoder::toCanonical(const Mat4& w) const
 {
-    auto toCanon = [&](const Vec3& v) { return axes_[0] * v.x + axes_[1] * v.y + axes_[2] * v.z; };
-    // Row j of the sender->canonical matrix, as a sender-space vector.
-    auto senderAxis = [&](int j) {
-        auto c = [&](const Vec3& a) { return j == 0 ? a.x : j == 1 ? a.y : a.z; };
-        return Vec3{c(axes_[0]), c(axes_[1]), c(axes_[2])};
-    };
-
-    // World rotation columns, with any scale removed.
-    const Vec3 cols[3] = {Vec3{w.m[0][0], w.m[1][0], w.m[2][0]}.normalized(),
-                          Vec3{w.m[0][1], w.m[1][1], w.m[2][1]}.normalized(),
-                          Vec3{w.m[0][2], w.m[1][2], w.m[2][2]}.normalized()};
-    auto rotate = [&](const Vec3& v) { return cols[0] * v.x + cols[1] * v.y + cols[2] * v.z; };
-
-    // R' = C R C^T, column by column; proper even if the sender is left-handed.
-    Vec3 basis[3];
-    for (int j = 0; j < 3; ++j)
-        basis[j] = toCanon(rotate(senderAxis(j)));
-
     TrackerPose p;
     p.valid = true;
-    p.position = toCanon({w.m[0][3], w.m[1][3], w.m[2][3]}) * unitsToMeters_;
-    p.orientation = Quat::fromBasis(basis[0], basis[1], basis[2]);
+    p.position = conversion_.position({w.m[0][3], w.m[1][3], w.m[2][3]});
+    p.orientation = conversion_.rotation({Vec3{w.m[0][0], w.m[1][0], w.m[2][0]}, Vec3{w.m[0][1], w.m[1][1], w.m[2][1]},
+                                          Vec3{w.m[0][2], w.m[1][2], w.m[2][2]}});
     return p;
 }
 
