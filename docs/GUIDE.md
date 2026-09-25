@@ -128,4 +128,5 @@ push. Pushing a `v*` tag publishes a GitHub Release with:
 | `MotionVRBridge-macOS.zip` | `MotionVRBridge.app` (Apple Silicon, unsigned) |
 | `MotionVRBridge-Linux-x64.tar.gz` | App + driver + `register-driver.sh` |
 
-CI builds don't include the Vicon source, because the Vicon SDK isn't redistributed here.
+CI doesn't have the Vicon SDK, so release builds don't include the Vicon source yet.
+`LICENSE-EXCEPTION` allows shipping it once Vicon's own terms permit redistributing their library.

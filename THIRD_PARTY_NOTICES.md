@@ -1,12 +1,15 @@
 # Third-party notices
 
-MotionVR Bridge is licensed under the GNU General Public License v3.0 (see `LICENSE`).
+MotionVR Bridge is licensed under the GNU General Public License v3.0 (see `LICENSE`), with an
+additional permission for linking the Vicon DataStream SDK (see `LICENSE-EXCEPTION`).
 It includes or links the following third-party software.
 
 ## Slint
 
-The UI toolkit, used under the GNU General Public License v3.0.
-<https://github.com/slint-ui/slint>
+The UI toolkit. Release builds use Slint under the
+[Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0](https://github.com/slint-ui/slint/blob/master/LICENSES/LicenseRef-Slint-Royalty-free-2.0.md);
+the attribution badge is shown on the download page (README). Slint is also available under the
+GNU General Public License v3.0. <https://github.com/slint-ui/slint>
 
 ## RemoteCaptury
 
@@ -60,5 +63,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Vicon DataStream SDK
 
-Optional. Proprietary software from Vicon Motion Systems. It is not included in this repository or
-in the release builds; builds that use it are for your own use under Vicon's license terms.
+Optional. Proprietary software from Vicon Motion Systems, used under Vicon's license terms. It is
+not included in this repository. Builds that include it rely on the additional permission in
+`LICENSE-EXCEPTION`.

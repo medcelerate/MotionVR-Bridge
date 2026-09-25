@@ -20,4 +20,7 @@ and optionally your hands as controllers), then press Start.
 
 See the [guide](docs/GUIDE.md) for setup and building from source.
 
-Designed by [Virtualworx](https://virtualworx.io). Licensed under the [GPL-3.0](LICENSE).
+[![Made with Slint](https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png)](https://slint.dev)
+
+Designed by [Virtualworx](https://virtualworx.io). Licensed under the [GPL-3.0](LICENSE) with an
+[exception](LICENSE-EXCEPTION) for the Vicon DataStream SDK.
