@@ -327,6 +327,8 @@ export component AppWindow inherits Window {
     in property <string> rec-peers;
     callback record-clicked();
     callback rec-setting(string, string); // key, value
+    in property <bool> picking-folder;
+    callback choose-folder();
     callback open-url(string);
     callback tracker-clicked(int);
 
@@ -428,7 +430,9 @@ export component AppWindow inherits Window {
                     }
                     Button {
                         height: 40px;
-                        text: "Recording…";
+                        width: 44px;
+                        icon: @image-url("icons/cog.svg");
+                        accessible-label: "Recording settings";
                         clicked => {
                             recording-settings.show();
                         }
@@ -517,11 +521,34 @@ export component AppWindow inherits Window {
                     letter-spacing: 1.5px;
                     color: Theme.muted;
                 }
-                SettingField {
-                    label: "Folder";
-                    value <=> root.rec-folder;
-                    edited(v) => {
-                        root.rec-setting("folder", v);
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: "Folder";
+                        font-size: 12px;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: Palette.control-background;
+                            Text {
+                                x: 10px;
+                                width: parent.width - 20px;
+                                text: root.rec-folder;
+                                overflow: elide;
+                                vertical-alignment: center;
+                                font-size: 12px;
+                            }
+                        }
+                        Button {
+                            text: root.picking-folder ? "Choosing…" : "Choose…";
+                            enabled: !root.picking-folder;
+                            clicked => {
+                                root.choose-folder();
+                            }
+                        }
                     }
                 }
                 SettingSwitch {

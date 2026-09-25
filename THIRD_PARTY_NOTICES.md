@@ -335,6 +335,11 @@ Serialization library used to read Open3DStream packets, under the Apache Licens
 DNS-SD discovery for synchronized recording, by Mattias Jansson, released into the public domain
 (`third_party/mdns`). <https://github.com/mjansson/mdns>
 
+## portable-file-dialogs
+
+Native folder picker, by Sam Hocevar, under the WTFPL (`third_party/portable-file-dialogs`).
+<https://github.com/samhocevar/portable-file-dialogs>
+
 ## Vicon DataStream SDK
 
 Proprietary software from Vicon Motion Systems, redistributed with permission. Its C++ client

@@ -129,10 +129,11 @@ if (MVR_BUILD_APP)
         src/sources/RecordingSource.cpp
         src/sources/XsensSource.cpp
         src/net/Discovery.cpp
-        src/record/RecordingManager.cpp)
-    target_include_directories(MotionVRBridge PRIVATE third_party/mdns)
+        src/record/RecordingManager.cpp
+        src/ui/FolderPicker.cpp)
+    target_include_directories(MotionVRBridge PRIVATE third_party/mdns third_party/portable-file-dialogs)
     if (WIN32)
-        target_link_libraries(MotionVRBridge PRIVATE iphlpapi)
+        target_link_libraries(MotionVRBridge PRIVATE iphlpapi ole32 shell32 comdlg32 userenv uuid)
     endif()
     target_link_libraries(MotionVRBridge PRIVATE mvr_common mvr_decoders nng Slint::Slint RemoteCaptury Threads::Threads)
     slint_target_sources(MotionVRBridge ui/app.slint NAMESPACE ui)

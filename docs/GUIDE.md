@@ -45,8 +45,8 @@ The Linux library needs glibc 2.38 or newer (Ubuntu 24.04+, Fedora 39+).
 ## Recording
 
 Press **Record** while streaming to save everything the source sends: body points, finger curls
-and controller input. Takes go to `Documents/MotionVR Bridge/Recordings` (change it under
-**Recording…**), named after the date and time unless a take name is given.
+and controller input. Takes go to `Documents/MotionVR Bridge/Recordings` (choose another
+folder in the recording settings, under the cog next to Record), named after the date and time unless a take name is given.
 
 To play a take back, pick the **Recording** source and the take. **Speed** plays slower or faster.
 With **Interpolate** on (the default), frames are generated at a steady **Output rate** by
@@ -55,7 +55,7 @@ turn it off to replay the exact recorded frames.
 
 ### OSC control
 
-Turn on **OSC control** under **Recording…** to start and stop recording from any OSC tool
+Turn on **OSC control** in the recording settings (the cog) to start and stop recording from any OSC tool
 (TouchDesigner, QLab, a DAW…). Send to this machine on the OSC port (default 9100):
 
 | Address | Arguments | |
@@ -68,7 +68,7 @@ Turn on **OSC control** under **Recording…** to start and stop recording from 
 ### Synchronized recording
 
 Turn on **Synchronized recording** on each machine. Instances find each other on the local
-network with DNS-SD (Bonjour, service `_mvb._udp`), and **Recording…** lists the ones found.
+network with DNS-SD (Bonjour, service `_mvb._udp`), and the recording settings list the ones found.
 Starting or stopping on any of them (button or OSC) does the same on all of them, under the same
 take name with each machine's name appended, e.g. `Scene 1 - Studio A.mvb`. Every file stores its
 start time (`start_unix_ms`) for lining takes up afterwards. The OSC port must be reachable

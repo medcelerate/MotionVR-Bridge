@@ -3,6 +3,7 @@
 #include "core/Bridge.h"
 #include "core/Plugin.h"
 #include "record/RecordingManager.h"
+#include "ui/FolderPicker.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -219,6 +220,8 @@ int main()
         ui->set_rec_name(slint::SharedString(s.instanceName));
     }
     ui->on_record_clicked([&] { recorder.toggle(); });
+    mvr::FolderPicker folderPicker; // non-blocking; polled by the UI timer below
+    ui->on_choose_folder([&] { folderPicker.open("Recordings folder", recorder.settings().folder); });
     ui->on_rec_setting([&, weak = slint::ComponentWeakHandle(ui)](slint::SharedString key, slint::SharedString value) {
         mvr::record::RecordingSettings s = recorder.settings();
         const std::string k(key), v(value);
@@ -251,6 +254,12 @@ int main()
         w->set_frame_rate(snap.frameRate);
         w->set_source_status(slint::SharedString(snap.sourceStatus));
         w->set_sink_status(slint::SharedString(snap.sinkStatus));
+
+        w->set_picking_folder(folderPicker.busy());
+        if (std::string folder; folderPicker.poll(folder) && !folder.empty()) {
+            w->set_rec_folder(slint::SharedString(folder));
+            w->invoke_rec_setting("folder", slint::SharedString(folder));
+        }
 
         const auto rec = recorder.status();
         if (w->get_recording() && !rec.recording && !snap.running)
