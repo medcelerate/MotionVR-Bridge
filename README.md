@@ -1,3 +1,5 @@
+<img src="packaging/icon/icon.png" alt="" width="96" align="right">
+
 # MotionVR Bridge
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Q5Q6YUGIA)

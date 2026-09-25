@@ -1,0 +1,2 @@
+// Embeds the application icon in MotionVRBridge.exe.
+IDI_APP_ICON ICON "MotionVRBridge.ico"

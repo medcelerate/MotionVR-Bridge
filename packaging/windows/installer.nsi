@@ -41,6 +41,8 @@ VIAddVersionKey "CompanyName" "Virtualworx"
 VIAddVersionKey "LegalCopyright" "Virtualworx"
 VIAddVersionKey "FileDescription" "${PRODUCT} installer"
 
+!define MUI_ICON "MotionVRBridge.ico"
+!define MUI_UNICON "MotionVRBridge.ico"
 !insertmacro MUI_PAGE_LICENSE "${STAGE}\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES

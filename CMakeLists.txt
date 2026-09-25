@@ -75,7 +75,16 @@ if (MVR_BUILD_APP)
     )
     target_link_libraries(MotionVRBridge PRIVATE mvr_common Slint::Slint RemoteCaptury Threads::Threads)
     slint_target_sources(MotionVRBridge ui/app.slint NAMESPACE ui)
+    # App icon (regenerate with packaging/icon/make_icon.py).
+    if (APPLE)
+        set(MACOS_ICON ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/MotionVRBridge.icns)
+        target_sources(MotionVRBridge PRIVATE ${MACOS_ICON})
+        set_source_files_properties(${MACOS_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    elseif (WIN32)
+        target_sources(MotionVRBridge PRIVATE packaging/windows/MotionVRBridge.rc)
+    endif()
     set_target_properties(MotionVRBridge PROPERTIES
+        MACOSX_BUNDLE_ICON_FILE MotionVRBridge.icns
         MACOSX_BUNDLE_BUNDLE_NAME "MotionVR Bridge"
         MACOSX_BUNDLE_GUI_IDENTIFIER com.medcelerate.motionvrbridge
         MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
@@ -130,7 +139,7 @@ if (MVR_BUILD_APP)
         install(FILES $<TARGET_FILE:slint_cpp-shared> DESTINATION MotionVRBridge.app/Contents/Frameworks)
     elseif (UNIX)
         set_target_properties(MotionVRBridge PROPERTIES INSTALL_RPATH "$ORIGIN")
-        install(FILES $<TARGET_FILE:slint_cpp-shared> DESTINATION .)
+        install(FILES $<TARGET_FILE:slint_cpp-shared> packaging/linux/motionvrbridge.png DESTINATION .)
     else()
         install(FILES $<TARGET_FILE:slint_cpp-shared> DESTINATION .)
         # Slint.dll must also sit next to the executable in the build tree.
