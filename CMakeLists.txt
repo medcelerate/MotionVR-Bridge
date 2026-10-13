@@ -27,7 +27,7 @@ if (WIN32)
     target_link_libraries(mvr_common PUBLIC ws2_32)
 endif()
 
-# --- Stream decoders: Open3DStream, Xsens MVN (app + tests) ------------------
+# --- Stream decoders: Open3DStream, Xsens MVN, mocopi (app + tests) ----------
 if (MVR_BUILD_APP OR MVR_BUILD_TESTS)
     include(FetchContent)
     # FlatBuffers: headers plus the flatc compiler, to generate the reader
@@ -51,7 +51,7 @@ if (MVR_BUILD_APP OR MVR_BUILD_TESTS)
         DEPENDS flatc ${O3DS_SCHEMA}
         COMMENT "Generating Open3DStream reader")
 
-    add_library(mvr_decoders STATIC src/o3ds/O3dsDecoder.cpp src/xsens/MvnDecoder.cpp ${O3DS_GENERATED_DIR}/o3ds_generated.h)
+    add_library(mvr_decoders STATIC src/o3ds/O3dsDecoder.cpp src/xsens/MvnDecoder.cpp src/mocopi/MocopiDecoder.cpp ${O3DS_GENERATED_DIR}/o3ds_generated.h)
     target_include_directories(mvr_decoders PUBLIC src PRIVATE ${O3DS_GENERATED_DIR}
         ${flatbuffers_SOURCE_DIR}/include)
     target_link_libraries(mvr_decoders PUBLIC mvr_common)
@@ -125,6 +125,7 @@ if (MVR_BUILD_APP)
     unset(BUILD_SHARED_LIBS)
 
     target_sources(MotionVRBridge PRIVATE
+        src/sources/MocopiSource.cpp
         src/sources/Open3DStreamSource.cpp
         src/sources/RecordingSource.cpp
         src/sources/XsensSource.cpp

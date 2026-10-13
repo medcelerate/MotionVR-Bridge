@@ -1,6 +1,7 @@
 # MotionVR Bridge guide
 
-Setup details, the SteamVR driver, and building from source.
+Setup details, the SteamVR driver, and building from source. The app also has a built-in manual:
+press **?** in the top right.
 
 ## First launch
 
@@ -30,6 +31,7 @@ cmake --build build
 | Captury Live | Uses [RemoteCaptury](https://github.com/thecaptury/RemoteCaptury). Connects asynchronously and reconnects on its own. Leave the host empty to auto-discover over multicast. Follows the first actor that streams unless you set an Actor ID. |
 | Vicon DataStream | Optional, needs the Vicon DataStream SDK (see below). Connects to Shogun, Nexus, Tracker or Evoke (default `localhost:801`). Maps segments by name: Shogun skeletons (`Hips`, `LeftForeArm`, `LeftLeg`…), Plug-in Gait (`Pelvis`, `LRadius`, `LTibia`…), or rigid-body objects named after body parts (`Waist`, `LeftFoot`, `Head`…). Named rigid bodies win over skeleton segments. |
 | Xsens MVN | Receives MVN Animate / Analyze's Network Streamer on UDP (default port 9763). In MVN, add a network streaming target with this PC's IP and port and set the pose data to **Position + Quaternion**. Includes finger segments when gloves are used. Follows the first character streamed unless you enter a character number. |
+| Sony mocopi | Receives the mocopi app's "mocopi (UDP)" stream on UDP (default port 12351). In the app's PC connection settings, enter this computer's IP address (not localhost) and port, with the phone on the same network; use a different port per performer. Maps mocopi's 27-joint skeleton (root, torso, head, arms, legs; no fingers). Sony doesn't publish this format: the decoder follows the community notes in [seagetch/mcp-receiver](https://github.com/seagetch/mcp-receiver/blob/main/doc/Protocol.md) and Sony's open-source MotionBuilder plugin. |
 | Open3DStream | Receives [Open3DStream](https://www.open3dstream.com/) from MotionBuilder, Maya, Unreal or any other sender. Pick the protocol that pairs with the sender's (Publish → NNG Subscribe, Pair Server ↔ Pair Client, Pipeline Push → NNG Pipeline Pull, UDP → UDP) and its address (default `tcp://127.0.0.1:6001`; for UDP, `udp://0.0.0.0:<port>` to listen). Axes and units come from the stream; the fallbacks apply only to senders that don't send them. Joints are matched by name (HumanIK, Mixamo, Unreal and Shogun names), and single-node subjects named after a body part (`Waist`, `LeftFoot`…) count as rigid bodies. |
 | Recording | Plays a recorded take back into any target (see [Recording](#recording)). |
 | Test Pattern | A synthetic body that marches and waves, for testing targets without a capture rig. |

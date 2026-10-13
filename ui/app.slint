@@ -1,4 +1,5 @@
 import { Button, ComboBox, LineEdit, Palette, ScrollView, Switch } from "std-widgets.slint";
+import { HelpOverlay } from "help.slint";
 
 export struct ConfigField {
     label: string,
@@ -370,6 +371,15 @@ export component AppWindow inherits Window {
                 vertical-alignment: center;
             }
             Rectangle { }
+            Button {
+                height: 28px;
+                text: "?";
+                accessible-label: "Open the manual";
+                clicked => {
+                    manual.open = true;
+                    manual.focus-manual();
+                }
+            }
             Rectangle {
                 width: pill.preferred-width + 24px;
                 height: 28px;
@@ -516,6 +526,14 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+
+    manual := HelpOverlay {
+        width: root.width;
+        height: root.height;
+        accent: Theme.accent;
+        panel: Theme.panel;
+        muted: Theme.muted;
     }
 
     recording-settings := PopupWindow {

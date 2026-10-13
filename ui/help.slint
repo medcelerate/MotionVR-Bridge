@@ -1,0 +1,213 @@
+// The in-app manual.
+import { Button, ScrollView, Palette } from "std-widgets.slint";
+
+export struct HelpTopic {
+    title: string,
+    paragraphs: [string],
+}
+
+export global HelpContent {
+    out property <[HelpTopic]> topics: [
+        {
+            title: "Getting started",
+            paragraphs: [
+                "MotionVR Bridge takes body tracking from a motion capture system (the source, on the left) and sends it to VR (the target, on the right).",
+                "1. Pick a source and fill in its settings (usually the address of the machine running the capture software).\n2. Pick a target: VRChat OSC Trackers, or SteamVR Trackers.\n3. Press Start. The dots on the body light up as each point moves.",
+                "No capture system handy? Pick Test Pattern to see everything working with a marching, waving figure.",
+                "The status lines under each panel tell you what's happening: connecting, receiving, how many points were found, and any problems.",
+            ]
+        },
+        {
+            title: "Sources",
+            paragraphs: [
+                "Captury Live — enter the Captury host (leave it empty to find it automatically) and port 2101. Follows the first tracked actor unless you enter an actor ID.",
+                "Vicon DataStream — enter the Shogun / Nexus / Tracker host (default localhost:801). Skeleton segments and rigid bodies named after body parts (Waist, LeftFoot…) are matched by name.",
+                "Xsens MVN — in MVN's Network Streamer, add a target with this computer's IP and port 9763 and set the pose data to \"Position + Quaternion\". Glove finger data comes through too.",
+                "Sony mocopi — in the mocopi app, open the PC connection settings, enter this computer's IP and port 12351, and choose the \"mocopi (UDP)\" format. Phone and computer must be on the same network. For several performers, give each one its own port.",
+                "Open3DStream — pick the protocol that pairs with the sender's (Publish → NNG Subscribe, Pipeline Push → NNG Pipeline Pull, UDP → UDP) and its address (default tcp://127.0.0.1:6001).",
+                "Recording — plays back a take you recorded earlier (see Recording & playback).",
+                "Test Pattern — a synthetic figure for trying things out.",
+            ]
+        },
+        {
+            title: "VRChat",
+            paragraphs: [
+                "1. In VRChat, enable OSC (Action Menu → Options → OSC → Enabled).\n2. Pick the VRChat OSC Trackers target. Keep the address 127.0.0.1 and port 9000 if VRChat runs on this computer.\n3. Press Start, then calibrate full body in VRChat as usual.",
+                "VRChat takes hip, chest, feet, knees and elbows. Leave \"Send head for alignment\" on so VRChat lines the trackers up with your headset.",
+                "VRChat recommends sending fewer points if your tracking isn't perfectly accurate: click the knee or elbow dots on the body to stop sending them.",
+            ]
+        },
+        {
+            title: "SteamVR",
+            paragraphs: [
+                "The SteamVR Trackers target sends to the MotionVR Bridge SteamVR driver, which shows your body as Vive trackers in every SteamVR and OpenXR game.",
+                "Installing the driver: the Windows installer (or the separate driver installer) registers it automatically. Start SteamVR once before installing. Otherwise run register-driver.ps1 (Windows) or register-driver.sh (Linux) from the download, then restart SteamVR.",
+                "Alignment: the driver lines the capture system up with your headset by itself. Position aligns at once; rotation locks after you walk around a little. Keep the head dot enabled.",
+                "Hands as controllers: turn this on to drive your in-game hands from the capture system. They appear as Valve Index controllers. Only use it with no real controllers connected. Stand in a T-pose with palms down and press Calibrate hands so wrist rotation is followed exactly.",
+                "Finger tracking: with hands as controllers on, this drives in-game fingers from the source's finger data (Captury, Xsens gloves, Vicon or Open3DStream finger joints). Restart SteamVR after changing it.",
+                "If SteamVR doesn't assign tracker roles by itself, set them under Settings → Controllers → Manage Trackers.",
+            ]
+        },
+        {
+            title: "The body view",
+            paragraphs: [
+                "Each dot is a point the target can receive. It lights up and grows as that point moves, so you can see at a glance what's being tracked.",
+                "• Bright dot — receiving and sending.\n• Grey dot — not receiving that point from the source.\n• Hollow dot — the chosen target doesn't use that point (for example hands in VRChat).",
+                "Click a dot to stop sending that point; click it again to send it again. Hover over a dot to see its name.",
+                "The figure faces you, so its right side is on your left (R and L are marked).",
+            ]
+        },
+        {
+            title: "Recording & playback",
+            paragraphs: [
+                "Press Record while streaming to save everything the source sends: body points, fingers and controller input. Press it again to stop. Takes are named after the date and time.",
+                "The cog next to Record opens the recording settings: the folder takes are saved to, an optional CSV copy for spreadsheets, OSC control and synchronized recording.",
+                "To play a take back, pick the Recording source, choose the take and press Start. It feeds any target just like a live system, which is handy for testing VR without the capture rig.",
+                "• Speed — 0.5 plays at half speed.\n• Interpolate — blends between recorded frames at a steady output rate, so slow motion stays smooth.\n• Loop — starts again from the beginning.",
+                "Takes are .mvb files (MessagePack), readable from Python and other tools.",
+            ]
+        },
+        {
+            title: "OSC & sync",
+            paragraphs: [
+                "OSC control lets other tools (TouchDesigner, QLab, a DAW…) start and stop recording. Turn it on under the cog and send to this computer on the OSC port (default 9100):",
+                "• /mvb/record 1 or 0, optionally followed by a take name\n• /mvb/record/start, /mvb/record/stop, /mvb/record/toggle",
+                "Synchronized recording links several computers running MotionVR Bridge on the same network. Turn it on in every instance that should join in; they find each other automatically and the cog panel lists them. Starting or stopping on any of them (button or OSC) does the same on all of them, with matching take names ending in each computer's name.",
+                "Sync doesn't need OSC control on, but the computers must be able to reach each other's OSC port, so allow it through any firewall.",
+            ]
+        },
+        {
+            title: "Troubleshooting",
+            paragraphs: [
+                "Nothing arrives from the source — check the status line under the source. Make sure the capture software is streaming, the address and port match, and a firewall isn't blocking the port (Windows may ask the first time).",
+                "Some dots stay grey — the source isn't sending those points, or its skeleton uses names the app doesn't recognise. The source status shows how many points were matched.",
+                "VRChat ignores the trackers — enable OSC in VRChat and calibrate full body after pressing Start.",
+                "SteamVR shows no trackers — check the driver is registered (reinstall or run the register script), restart SteamVR, and make sure the driver port (39570) matches.",
+                "The body is turned the wrong way in SteamVR — walk around for a few seconds so the driver can lock the rotation. Each Start begins a fresh alignment.",
+                "mocopi isn't received — use the \"mocopi (UDP)\" format, the computer's IP (not localhost) and port 12351, with both devices on the same Wi-Fi.",
+                "The full guide, with more detail, is on GitHub: github.com/medcelerate/MotionVR-Bridge",
+            ]
+        },
+    ];
+}
+
+component HelpParagraph inherits Text {
+    font-size: 13px;
+    wrap: word-wrap;
+}
+
+export component HelpOverlay inherits Rectangle {
+    in-out property <bool> open;
+    in-out property <int> topic: 0;
+    in property <color> accent;
+    in property <color> panel;
+    in property <color> muted;
+
+    visible: root.open;
+
+    public function focus-manual() {
+        keys.focus();
+    }
+    background: #000000a0;
+
+    // Clicking the backdrop closes the manual.
+    TouchArea {
+        clicked => {
+            root.open = false;
+        }
+    }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.open = false;
+                return accept;
+            }
+            reject
+        }
+
+        Rectangle {
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            width: min(root.width - 80px, 820px);
+            height: min(root.height - 80px, 560px);
+            background: root.panel;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Palette.border;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: #00000080;
+
+            // Swallow clicks on the panel so they don't close it.
+            TouchArea { }
+
+            HorizontalLayout {
+                padding: 20px;
+                spacing: 20px;
+
+                VerticalLayout {
+                    width: 190px;
+                    spacing: 4px;
+                    Text {
+                        text: "MANUAL";
+                        font-size: 11px;
+                        font-weight: 700;
+                        letter-spacing: 1.5px;
+                        color: root.muted;
+                    }
+                    Rectangle { height: 8px; }
+                    for t[i] in HelpContent.topics: Rectangle {
+                        height: 32px;
+                        border-radius: 6px;
+                        background: i == root.topic ? root.accent.transparentize(0.85) : ta.has-hover ? Palette.foreground.transparentize(0.94) : transparent;
+                        Text {
+                            x: 10px;
+                            text: t.title;
+                            font-size: 13px;
+                            color: i == root.topic ? root.accent : Palette.foreground;
+                            vertical-alignment: center;
+                        }
+                        ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.topic = i;
+                            }
+                        }
+                    }
+                    Rectangle { }
+                }
+
+                VerticalLayout {
+                    spacing: 12px;
+                    HorizontalLayout {
+                        Text {
+                            text: HelpContent.topics[root.topic].title;
+                            font-size: 20px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { }
+                        Button {
+                            icon: @image-url("icons/close.svg");
+                            accessible-label: "Close manual";
+                            clicked => {
+                                root.open = false;
+                            }
+                        }
+                    }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            alignment: start;
+                            padding-right: 12px;
+                            spacing: 14px;
+                            for p in HelpContent.topics[root.topic].paragraphs: HelpParagraph {
+                                text: p;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

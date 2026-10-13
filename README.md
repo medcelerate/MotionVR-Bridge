@@ -6,7 +6,7 @@
 
 ![MotionVR Bridge](docs/screenshot.png)
 
-MotionVR Bridge streams full-body motion capture into VR. Pick a source (Captury Live, Vicon, Xsens MVN or Open3DStream)
+MotionVR Bridge streams full-body motion capture into VR. Pick a source (Captury Live, Vicon, Xsens MVN, Sony mocopi or Open3DStream)
 and a target (VRChat's OSC trackers, or SteamVR, where your body shows up as virtual trackers
 and optionally your hands as controllers), then press Start. Record takes, replay them into any
 target, and trigger recording over OSC or in sync across machines.
@@ -21,7 +21,8 @@ target, and trigger recording over OSC or in sync across machines.
 | macOS (Apple Silicon) | [MotionVRBridge-macOS.zip](https://github.com/medcelerate/MotionVR-Bridge/releases/latest/download/MotionVRBridge-macOS.zip) |
 | Linux (x64, Ubuntu 24.04+) | [MotionVRBridge-Linux-x64.tar.gz](https://github.com/medcelerate/MotionVR-Bridge/releases/latest/download/MotionVRBridge-Linux-x64.tar.gz) |
 
-See the [guide](docs/GUIDE.md) for setup and building from source.
+Press **?** in the app for the built-in manual, or see the [guide](docs/GUIDE.md) for setup and
+building from source.
 
 [![Made with Slint](https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png)](https://slint.dev)
 

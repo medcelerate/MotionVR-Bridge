@@ -11,6 +11,7 @@
 #include "record/RecordingManager.h"
 #include "record/RecordingFile.h"
 #include "xsens/MvnDecoder.h"
+#include "mocopi/MocopiDecoder.h"
 #include "o3ds_generated.h"
 #include "StreamReceiver.h"
 #include "net/UdpSocket.h"
@@ -621,6 +622,108 @@ void testTakeNames()
     check(sanitizeTake("C:\\x") == "C__x" && sanitizeTake("...") == "", "takes: no drive or separator characters");
 }
 
+// mocopi field: u32 LE length, 4-char name, value.
+std::vector<uint8_t> mocopiField(const char* name, const std::vector<uint8_t>& value)
+{
+    std::vector<uint8_t> out;
+    const uint32_t n = static_cast<uint32_t>(value.size());
+    out.insert(out.end(), {uint8_t(n), uint8_t(n >> 8), uint8_t(n >> 16), uint8_t(n >> 24)});
+    out.insert(out.end(), name, name + 4);
+    out.insert(out.end(), value.begin(), value.end());
+    return out;
+}
+
+std::vector<uint8_t> mocopiConcat(std::initializer_list<std::vector<uint8_t>> parts)
+{
+    std::vector<uint8_t> out;
+    for (const auto& p : parts)
+        out.insert(out.end(), p.begin(), p.end());
+    return out;
+}
+
+std::vector<uint8_t> mocopiTran(mvr::Quat q, mvr::Vec3 p)
+{
+    std::vector<uint8_t> out;
+    for (float f : {q.x, q.y, q.z, q.w, p.x, p.y, p.z}) {
+        uint8_t b[4];
+        std::memcpy(b, &f, 4);
+        out.insert(out.end(), b, b + 4);
+    }
+    return out;
+}
+
+// Local offsets of Sony's 27-joint skeleton for the test: root 0.9 m up,
+// spine/neck/head stacked 0.08 m apart, limbs straight down or out.
+mvr::Vec3 mocopiRestOffset(int id)
+{
+    if (id == 0) return {0, 0.9f, 0};
+    if (id <= 10) return {0, 0.08f, 0};                        // torso, neck, head
+    if (id == 11) return {0.05f, 0, 0};                        // l_shoulder
+    if (id == 15) return {-0.05f, 0, 0};                       // r_shoulder
+    if (id <= 18) return {(id <= 14 ? 0.25f : -0.25f), 0, 0};  // arms out sideways
+    if (id == 19) return {0.1f, 0, 0};                         // l_up_leg
+    if (id == 23) return {-0.1f, 0, 0};                        // r_up_leg
+    return {0, -0.4f, 0};                                      // legs down
+}
+
+std::vector<uint8_t> mocopiPacket(bool definition, mvr::Quat rootRotation)
+{
+    static const int parents[27] = {-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 7, 11, 12, 13, 7, 15, 16, 17, 0, 19, 20, 21, 0, 23, 24, 25};
+    std::vector<uint8_t> bones;
+    for (int id = 0; id < 27; ++id) {
+        std::vector<uint8_t> bone = mocopiField("bnid", {uint8_t(id), 0});
+        if (definition) {
+            const auto pb = mocopiField("pbid", {uint8_t(parents[id] & 0xff), uint8_t(parents[id] < 0 ? 0xff : 0)});
+            bone.insert(bone.end(), pb.begin(), pb.end());
+        }
+        const auto tran = mocopiField("tran", mocopiTran(id == 0 ? rootRotation : mvr::Quat{}, mocopiRestOffset(id)));
+        bone.insert(bone.end(), tran.begin(), tran.end());
+        const auto wrapped = mocopiField(definition ? "bndt" : "btdt", bone);
+        bones.insert(bones.end(), wrapped.begin(), wrapped.end());
+    }
+    const std::string format = "sony motion format";
+    const auto head = mocopiField("head", mocopiConcat({mocopiField("ftyp", {format.begin(), format.end()}),
+                                                        mocopiField("vrsn", {1})}));
+    if (definition)
+        return mocopiConcat({head, mocopiField("skdf", mocopiField("bons", bones))});
+    return mocopiConcat({head, mocopiField("fram", mocopiConcat({mocopiField("fnum", {7, 0, 0, 0}),
+                                                                 mocopiField("btrs", bones)}))});
+}
+
+void testMocopi()
+{
+    using mvr::TrackerRole;
+    mvr::mocopi::MocopiDecoder decoder;
+    mvr::TrackingFrame frame;
+    std::string error;
+
+    const auto definition = mocopiPacket(true, {});
+    check(!decoder.add(definition.data(), definition.size(), frame, error) && error.empty(),
+          "mocopi: skeleton definition alone isn't a frame");
+
+    const auto still = mocopiPacket(false, {});
+    check(decoder.add(still.data(), still.size(), frame, error), "mocopi: frame decodes");
+    check(nearVec(frame[TrackerRole::Hip].position, {0, 0.9f, 0}), "mocopi: hip from root");
+    check(nearVec(frame[TrackerRole::Head].position, {0, 0.9f + 10 * 0.08f, 0}), "mocopi: head up the spine");
+    check(nearVec(frame[TrackerRole::LeftHand].position, {0.05f + 3 * 0.25f, 0.9f + 7 * 0.08f, 0}),
+          "mocopi: hand along the arm");
+    check(nearVec(frame[TrackerRole::RightFoot].position, {-0.1f, 0.9f - 2 * 0.4f, 0}), "mocopi: foot down the leg");
+
+    // Turning the root 90 degrees about +Y swings the left arm from +X to -Z.
+    const auto turned = mocopiPacket(false, mvr::Quat::fromAxisAngle({0, 1, 0}, 90 * mvr::kDegToRad));
+    check(decoder.add(turned.data(), turned.size(), frame, error), "mocopi: rotated frame decodes");
+    check(nearVec(frame[TrackerRole::LeftHand].position, {0, 0.9f + 7 * 0.08f, -(0.05f + 3 * 0.25f)}),
+          "mocopi: root rotation carries the arm");
+
+    // Frames work before any skeleton definition (default hierarchy).
+    mvr::mocopi::MocopiDecoder fresh;
+    check(fresh.add(still.data(), still.size(), frame, error) &&
+              nearVec(frame[TrackerRole::LeftKnee].position, {0.1f, 0.5f, 0}),
+          "mocopi: default hierarchy before skeleton definition");
+
+    check(!fresh.add(still.data(), still.size() - 3, frame, error) && !error.empty(), "mocopi: rejects truncated packet");
+}
+
 } // namespace
 
 int main()
@@ -642,6 +745,7 @@ int main()
     testOsc();
     testRecordingRoundTrip();
     testTakeNames();
+    testMocopi();
     std::printf("%d failure(s)\n", failures);
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

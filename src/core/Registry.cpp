@@ -3,6 +3,7 @@
 #include "sinks/SteamVRSink.h"
 #include "sinks/VRChatOscSink.h"
 #include "sources/CapturySource.h"
+#include "sources/MocopiSource.h"
 #include "sources/Open3DStreamSource.h"
 #include "sources/RecordingSource.h"
 #include "sources/TestPatternSource.h"
@@ -67,6 +68,7 @@ const std::vector<SourceInfo>& availableSources()
         {"Vicon DataStream", [] { return std::make_unique<ViconSource>(); }},
 #endif
         {"Xsens MVN", [] { return std::make_unique<XsensSource>(); }},
+        {"Sony mocopi", [] { return std::make_unique<MocopiSource>(); }},
         {"Open3DStream", [] { return std::make_unique<Open3DStreamSource>(); }},
         {"Recording", [] { return std::make_unique<RecordingSource>(); }},
         {"Test Pattern", [] { return std::make_unique<TestPatternSource>(); }},
